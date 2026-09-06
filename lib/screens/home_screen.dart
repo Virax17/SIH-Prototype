@@ -3,8 +3,10 @@ import 'package:provider/provider.dart';
 
 import '../app_state.dart';
 import '../models.dart';
+import '../services/bluetooth_manager.dart';
 import '../theme.dart';
 import '../widgets/wave_bars.dart';
+import 'alert_history_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -12,7 +14,8 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
-    final connected = app.connectedDevice;
+    final bt = context.watch<BluetoothManager>();
+    final connected = bt.connectedDevice;
     final playing = app.playingMessage;
 
     return Container(
@@ -42,7 +45,7 @@ class HomeScreen extends StatelessWidget {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                connected?.name ?? 'No device paired',
+                                connected?.displayName ?? 'No device paired',
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(fontFamily: appFont, fontWeight: FontWeight.w600, fontSize: 13.5, color: AppColors.textPrimary),
                               ),
@@ -78,6 +81,8 @@ class HomeScreen extends StatelessWidget {
                     ),
                   ),
                 ),
+                const SizedBox(width: 8),
+                _AlertsButton(app: app),
               ],
             ),
           ),
@@ -132,7 +137,7 @@ class HomeScreen extends StatelessWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'Playing message from ${connected?.name ?? 'device'}',
+                        'Playing message from ${connected?.displayName ?? 'device'}',
                         style: const TextStyle(fontFamily: appFont, fontSize: 12.5, fontWeight: FontWeight.w500, color: AppColors.textPrimary),
                       ),
                     ),
@@ -156,6 +161,7 @@ class HomeScreen extends StatelessWidget {
               children: [for (final m in app.messages) _MessageBubble(m: m)],
             ),
           ),
+          const _TypedMessageBar(),
           Container(
             padding: const EdgeInsets.fromLTRB(16, 18, 16, 14),
             decoration: BoxDecoration(border: Border(top: BorderSide(color: AppColors.border(0.06)))),
@@ -189,6 +195,50 @@ class HomeScreen extends StatelessWidget {
       case ScriptMode.latin:
         return 'Latin script';
     }
+  }
+}
+
+class _AlertsButton extends StatelessWidget {
+  final AppState app;
+  const _AlertsButton({required this.app});
+
+  @override
+  Widget build(BuildContext context) {
+    final count = app.alertHistory.length;
+    return Material(
+      color: AppColors.dangerSoft,
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AlertHistoryScreen())),
+        child: SizedBox(
+          width: 40,
+          height: 40,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: [
+              const Icon(Icons.account_balance, color: AppColors.danger, size: 18),
+              if (count > 0)
+                Positioned(
+                  top: 1,
+                  right: 3,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    constraints: const BoxConstraints(minWidth: 14),
+                    decoration: const BoxDecoration(color: AppColors.danger, shape: BoxShape.circle),
+                    child: Text(
+                      count > 9 ? '9+' : '$count',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontFamily: appFont, fontSize: 9, fontWeight: FontWeight.w700, color: Colors.white),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -229,11 +279,19 @@ class _MessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final app = context.read<AppState>();
     final sent = m.dir == MsgDir.sent;
-    final phrase = app.phraseFor(m.phraseIdx, m.lang);
-    final showBoth = app.scriptMode == ScriptMode.both && m.lang != LangCode.en;
-    final showLatinOnly = app.scriptMode == ScriptMode.latin && m.lang != LangCode.en;
-    final primary = showLatinOnly ? phrase.latin : phrase.native;
-    final secondary = showBoth ? phrase.latin : null;
+
+    String primary;
+    String? secondary;
+    if (m.customText != null) {
+      primary = m.customText!;
+      secondary = null;
+    } else {
+      final phrase = app.phraseFor(m.phraseIdx, m.lang);
+      final showBoth = app.scriptMode == ScriptMode.both && m.lang != LangCode.en;
+      final showLatinOnly = app.scriptMode == ScriptMode.latin && m.lang != LangCode.en;
+      primary = showLatinOnly ? phrase.latin : phrase.native;
+      secondary = showBoth ? phrase.latin : null;
+    }
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -271,6 +329,19 @@ class _MessageBubble extends StatelessWidget {
                         color: sent ? Colors.white.withValues(alpha: 0.75) : AppColors.textSecondary(0.45),
                       ),
                     ),
+                    if (!sent) ...[
+                      const SizedBox(width: 10),
+                      InkWell(
+                        customBorder: const CircleBorder(),
+                        onTap: () => app.replay(m.id),
+                        child: Container(
+                          width: 20,
+                          height: 20,
+                          decoration: BoxDecoration(color: AppColors.accentSoft, shape: BoxShape.circle),
+                          child: Icon(m.playing ? Icons.volume_up : Icons.play_arrow, size: 12, color: AppColors.accent),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 3),
@@ -301,6 +372,73 @@ class _MessageBubble extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _TypedMessageBar extends StatefulWidget {
+  const _TypedMessageBar();
+
+  @override
+  State<_TypedMessageBar> createState() => _TypedMessageBarState();
+}
+
+class _TypedMessageBarState extends State<_TypedMessageBar> {
+  final _controller = TextEditingController();
+  final _focusNode = FocusNode();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _send() {
+    final app = context.read<AppState>();
+    app.sendTypedMessage(_controller.text);
+    _controller.clear();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(color: AppColors.card, borderRadius: BorderRadius.circular(100), border: Border.all(color: AppColors.border(0.12))),
+              child: TextField(
+                controller: _controller,
+                focusNode: _focusNode,
+                textInputAction: TextInputAction.send,
+                onSubmitted: (_) => _send(),
+                style: const TextStyle(fontFamily: appFont, fontSize: 14, color: AppColors.textPrimary),
+                decoration: InputDecoration(
+                  hintText: 'Type a message…',
+                  hintStyle: TextStyle(fontFamily: appFont, fontSize: 14, color: AppColors.textSecondary(0.4)),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Material(
+            color: AppColors.accent,
+            shape: const CircleBorder(),
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: _send,
+              child: const Padding(
+                padding: EdgeInsets.all(12),
+                child: Icon(Icons.arrow_upward, color: Colors.white, size: 18),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
