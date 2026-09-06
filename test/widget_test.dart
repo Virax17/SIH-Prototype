@@ -7,6 +7,6 @@ void main() {
     await tester.pumpWidget(const ITantraApp());
     await tester.pump();
 
-    expect(find.text('HOLD TO TALK'), findsOneWidget);
+    expect(find.text('Hold to talk'), findsOneWidget);
   });
 }

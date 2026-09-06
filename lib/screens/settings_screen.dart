@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../app_state.dart';
+import '../models.dart';
 import '../theme.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -10,126 +11,104 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
-    final tk = app.themeMode == AppThemeMode.dark ? ThemeTokens.dark : ThemeTokens.light;
-    final volLabel = app.vol >= 10 ? 'MAX' : '${app.vol * 10}%';
+    final connected = app.connectedDevice;
 
     return Container(
-      color: tk.bg,
+      color: AppColors.surface,
       child: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(14),
-            child: Row(
-              children: [
-                _BackButton(tk: tk, onTap: app.goHome),
-                const SizedBox(width: 12),
-                Text('Settings', style: TextStyle(fontFamily: barlow, fontWeight: FontWeight.w700, fontSize: 24, color: tk.text)),
-              ],
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 20, 16, 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text('Settings', style: TextStyle(fontFamily: appFont, fontWeight: FontWeight.w700, fontSize: 20, color: AppColors.textPrimary)),
             ),
           ),
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(14, 0, 14, 20),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
               children: [
-                _SectionLabel('Link', tk: tk),
                 _SettingsRow(
-                  tk: tk,
-                  onTap: app.goPairing,
-                  leading: const _SignalIconBadge(),
+                  onTap: () => app.setTab(AppTab.devices),
+                  iconBg: AppColors.accentSoft,
+                  icon: const Icon(Icons.bluetooth, color: AppColors.accent, size: 18),
                   title: 'Paired device',
-                  subtitle: kPairedDeviceName,
-                  trailing: const Icon(Icons.arrow_forward, color: Color(0xFF6F7D76), size: 22),
+                  subtitle: connected?.name ?? 'No device paired',
+                  trailing: true,
                 ),
-                _SectionLabel('Language', tk: tk),
+                const SizedBox(height: 8),
                 _SettingsRow(
-                  tk: tk,
-                  onTap: app.openLang,
-                  leading: _GlyphBadge(text: 'अ'),
-                  title: 'Default pair',
-                  subtitle: '${app.src} → ${app.dst}',
-                  trailing: const Icon(Icons.arrow_forward, color: Color(0xFF6F7D76), size: 22),
+                  onTap: app.openLangSheet,
+                  iconBg: AppColors.accentSoft,
+                  icon: const Icon(Icons.swap_horiz, color: AppColors.accent, size: 18),
+                  title: 'Default language pair',
+                  subtitle: '${app.langMine.latinName} → ${app.langTheirs.latinName}',
+                  trailing: true,
                 ),
-                _SectionLabel('Audio', tk: tk),
+                const SizedBox(height: 8),
                 Container(
-                  padding: const EdgeInsets.all(15),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF111614),
-                    borderRadius: BorderRadius.circular(13),
-                    border: Border.all(color: const Color(0xFF232E28), width: 1.5),
-                  ),
-                  child: Column(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(color: AppColors.card, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.border(0.08))),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.volume_up_outlined, color: Color(0xFFCFD9D3), size: 26),
-                          const SizedBox(width: 12),
-                          Expanded(child: Text('Playback volume', style: TextStyle(fontFamily: barlow, fontWeight: FontWeight.w600, fontSize: 18, color: tk.text))),
-                          Text(volLabel, style: const TextStyle(fontFamily: mono, fontWeight: FontWeight.w600, fontSize: 15, color: AppColors.amber)),
-                        ],
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: const BoxDecoration(color: AppColors.accentSoft, shape: BoxShape.circle),
+                        child: const Icon(Icons.volume_up, color: AppColors.accent, size: 17),
                       ),
-                      const SizedBox(height: 13),
-                      SizedBox(
-                        height: 34,
-                        child: Row(
-                          children: List.generate(10, (i) {
-                            final lit = i < app.vol;
-                            final color = lit ? (i >= 8 ? AppColors.red : AppColors.amber) : const Color(0xFF1E2723);
-                            return Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 2.5),
-                                child: Material(
-                                  color: color,
-                                  borderRadius: BorderRadius.circular(5),
-                                  child: InkWell(
-                                    borderRadius: BorderRadius.circular(5),
-                                    onTap: () => app.setVol(i + 1),
-                                  ),
-                                ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Playback volume', style: TextStyle(fontFamily: appFont, fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.textPrimary)),
+                            SliderTheme(
+                              data: SliderTheme.of(context).copyWith(
+                                trackHeight: 3,
+                                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
                               ),
-                            );
-                          }),
+                              child: Slider(
+                                value: app.volume,
+                                min: 0,
+                                max: 100,
+                                activeColor: AppColors.accent,
+                                inactiveColor: AppColors.border(0.12),
+                                onChanged: app.setVolume,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
                 _ToggleRow(
-                  tk: tk,
-                  leadingBg: AppColors.redSoftBg,
-                  leading: const Icon(Icons.warning_amber_rounded, color: AppColors.redGlyph, size: 24),
-                  title: 'Emergency override',
-                  subtitle: 'Priority plays at max volume',
-                  value: app.alertOn,
-                  onColor: AppColors.red,
-                  onTap: app.toggleAlert,
+                  onTap: app.toggleEmergencyEnabled,
+                  iconBg: AppColors.dangerSoft,
+                  icon: const Icon(Icons.campaign_outlined, color: AppColors.danger, size: 17),
+                  title: 'Emergency alerts',
+                  subtitle: 'Full-screen, max volume, non-dismissible',
+                  value: app.emergencyEnabled,
                 ),
-                const SizedBox(height: 10),
-                _ToggleRow(
-                  tk: tk,
-                  leadingBg: const Color(0xFF1C2620),
-                  leading: const Icon(Icons.wb_sunny_outlined, color: Color(0xFFCFD9D3), size: 24),
-                  title: 'Sunlight (light) theme',
-                  subtitle: 'For bright outdoor readability',
-                  value: app.themeMode == AppThemeMode.light,
-                  onColor: const Color(0xFF2B3830),
-                  onTap: app.toggleTheme,
+                const SizedBox(height: 8),
+                _SettingsRow(
+                  onTap: app.toggleScriptMode,
+                  iconBg: AppColors.neutralSoft,
+                  icon: Text('Aa', style: TextStyle(fontFamily: appFont, fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textSecondary(0.55))),
+                  title: 'Transcript text',
+                  subtitle: 'Voice is primary — text is shown as: ${_scriptModeLabel(app.scriptMode)}',
+                  trailing: true,
                 ),
-                _SectionLabel('About', tk: tk),
-                Container(
-                  padding: const EdgeInsets.all(15),
-                  decoration: BoxDecoration(
-                    color: tk.panelBg,
-                    borderRadius: BorderRadius.circular(13),
-                    border: Border.all(color: tk.panelBorder, width: 1.5),
-                  ),
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(14, 16, 14, 4),
                   child: Column(
                     children: [
-                      _AboutRow(label: 'Version', value: '1.0.0 (build 41)', tk: tk),
-                      const SizedBox(height: 7),
-                      _AboutRow(label: 'Speech models', value: 'on-device · 214 MB', tk: tk),
-                      const SizedBox(height: 7),
-                      _AboutRow(label: 'Network', value: 'never required', valueColor: AppColors.green, tk: tk),
+                      Text('iTantra v1.0.0 · Build 2026.09', style: TextStyle(fontFamily: appFont, fontSize: 12, color: Color(0x6617181A))),
+                      SizedBox(height: 2),
+                      Text('Offline push-to-talk voice translator', style: TextStyle(fontFamily: appFont, fontSize: 11.5, color: Color(0x4D17181A))),
                     ],
                   ),
                 ),
@@ -140,118 +119,55 @@ class SettingsScreen extends StatelessWidget {
       ),
     );
   }
-}
 
-class _AboutRow extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color? valueColor;
-  final ThemeTokens tk;
-  const _AboutRow({required this.label, required this.value, required this.tk, this.valueColor});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label, style: TextStyle(fontFamily: mono, fontSize: 12.5, height: 1.5, color: tk.textSec)),
-        Text(value, style: TextStyle(fontFamily: mono, fontSize: 12.5, height: 1.5, color: valueColor ?? const Color(0xFFCFD9D3))),
-      ],
-    );
-  }
-}
-
-class _SectionLabel extends StatelessWidget {
-  final String text;
-  final ThemeTokens tk;
-  const _SectionLabel(this.text, {required this.tk});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 12, 4, 6),
-      child: Text(text.toUpperCase(), style: const TextStyle(fontFamily: mono, fontWeight: FontWeight.w500, fontSize: 10.5, letterSpacing: 1.3, color: Color(0xFF66736C))),
-    );
-  }
-}
-
-class _SignalIconBadge extends StatelessWidget {
-  const _SignalIconBadge();
-  @override
-  Widget build(BuildContext context) {
-    final heights = [7.0, 12.0, 17.0, 22.0];
-    return Container(
-      width: 44,
-      height: 44,
-      decoration: BoxDecoration(color: const Color(0xFF1C2620), borderRadius: BorderRadius.circular(11)),
-      child: Center(
-        child: SizedBox(
-          height: 20,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisSize: MainAxisSize.min,
-            children: List.generate(4, (i) => Padding(
-                  padding: const EdgeInsets.only(right: 2.5),
-                  child: Container(width: 4, height: heights[i] * 0.9, decoration: BoxDecoration(color: i < 3 ? AppColors.green : const Color(0xFF2C3A32), borderRadius: BorderRadius.circular(1))),
-                )),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _GlyphBadge extends StatelessWidget {
-  final String text;
-  const _GlyphBadge({required this.text});
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 44,
-      height: 44,
-      decoration: BoxDecoration(color: const Color(0xFF1C2620), borderRadius: BorderRadius.circular(11)),
-      child: Center(child: Text(text, style: const TextStyle(fontFamily: 'NotoSansDevanagari', fontWeight: FontWeight.w700, fontSize: 17, color: AppColors.amber))),
-    );
+  String _scriptModeLabel(ScriptMode m) {
+    switch (m) {
+      case ScriptMode.both:
+        return 'Both';
+      case ScriptMode.native:
+        return 'Native script';
+      case ScriptMode.latin:
+        return 'Latin script';
+    }
   }
 }
 
 class _SettingsRow extends StatelessWidget {
-  final ThemeTokens tk;
   final VoidCallback onTap;
-  final Widget leading;
+  final Color iconBg;
+  final Widget icon;
   final String title;
   final String subtitle;
-  final Widget trailing;
-  const _SettingsRow({required this.tk, required this.onTap, required this.leading, required this.title, required this.subtitle, required this.trailing});
+  final bool trailing;
+  const _SettingsRow({required this.onTap, required this.iconBg, required this.icon, required this.title, required this.subtitle, this.trailing = false});
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: const Color(0xFF111614),
-      borderRadius: BorderRadius.circular(13),
+      color: AppColors.card,
+      borderRadius: BorderRadius.circular(16),
       child: InkWell(
-        borderRadius: BorderRadius.circular(13),
+        borderRadius: BorderRadius.circular(16),
         onTap: onTap,
         child: Container(
-          constraints: const BoxConstraints(minHeight: 76),
-          padding: const EdgeInsets.symmetric(horizontal: 15),
-          decoration: BoxDecoration(borderRadius: BorderRadius.circular(13), border: Border.all(color: const Color(0xFF232E28), width: 1.5)),
+          constraints: const BoxConstraints(minHeight: 56),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.border(0.08))),
           child: Row(
             children: [
-              leading,
-              const SizedBox(width: 13),
+              Container(width: 38, height: 38, decoration: BoxDecoration(color: iconBg, shape: BoxShape.circle), child: Center(child: icon)),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(title, style: TextStyle(fontFamily: barlow, fontWeight: FontWeight.w600, fontSize: 18, color: tk.text)),
-                    const SizedBox(height: 3),
-                    Text(subtitle, style: TextStyle(fontFamily: mono, fontSize: 12, color: tk.textSec)),
+                    Text(title, style: const TextStyle(fontFamily: appFont, fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.textPrimary)),
+                    Text(subtitle, overflow: TextOverflow.ellipsis, style: TextStyle(fontFamily: appFont, fontSize: 12.5, color: AppColors.textSecondary(0.5))),
                   ],
                 ),
               ),
-              trailing,
+              if (trailing) Icon(Icons.chevron_right, size: 18, color: AppColors.textSecondary(0.35)),
             ],
           ),
         ),
@@ -261,90 +177,58 @@ class _SettingsRow extends StatelessWidget {
 }
 
 class _ToggleRow extends StatelessWidget {
-  final ThemeTokens tk;
-  final Color leadingBg;
-  final Widget leading;
+  final VoidCallback onTap;
+  final Color iconBg;
+  final Widget icon;
   final String title;
   final String subtitle;
   final bool value;
-  final Color onColor;
-  final VoidCallback onTap;
-  const _ToggleRow({
-    required this.tk,
-    required this.leadingBg,
-    required this.leading,
-    required this.title,
-    required this.subtitle,
-    required this.value,
-    required this.onColor,
-    required this.onTap,
-  });
+  const _ToggleRow({required this.onTap, required this.iconBg, required this.icon, required this.title, required this.subtitle, required this.value});
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: const Color(0xFF111614),
-      borderRadius: BorderRadius.circular(13),
+      color: AppColors.card,
+      borderRadius: BorderRadius.circular(16),
       child: InkWell(
-        borderRadius: BorderRadius.circular(13),
+        borderRadius: BorderRadius.circular(16),
         onTap: onTap,
         child: Container(
-          constraints: const BoxConstraints(minHeight: 76),
-          padding: const EdgeInsets.symmetric(horizontal: 15),
-          decoration: BoxDecoration(borderRadius: BorderRadius.circular(13), border: Border.all(color: const Color(0xFF232E28), width: 1.5)),
+          constraints: const BoxConstraints(minHeight: 56),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.border(0.08))),
           child: Row(
             children: [
-              Container(width: 44, height: 44, decoration: BoxDecoration(color: leadingBg, borderRadius: BorderRadius.circular(11)), child: Center(child: leading)),
-              const SizedBox(width: 13),
+              Container(width: 38, height: 38, decoration: BoxDecoration(color: iconBg, shape: BoxShape.circle), child: Center(child: icon)),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(title, style: TextStyle(fontFamily: barlow, fontWeight: FontWeight.w600, fontSize: 18, color: tk.text)),
-                    const SizedBox(height: 3),
-                    Text(subtitle, style: TextStyle(fontFamily: mono, fontSize: 12, height: 1.25, color: tk.textSec)),
+                    Text(title, style: const TextStyle(fontFamily: appFont, fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.textPrimary)),
+                    Text(subtitle, style: TextStyle(fontFamily: appFont, fontSize: 12.5, color: AppColors.textSecondary(0.5))),
                   ],
                 ),
               ),
               AnimatedContainer(
                 duration: const Duration(milliseconds: 150),
-                width: 62,
-                height: 36,
+                width: 44,
+                height: 26,
                 padding: const EdgeInsets.all(3),
-                decoration: BoxDecoration(color: value ? onColor : const Color(0xFF2B3830), borderRadius: BorderRadius.circular(18)),
+                decoration: BoxDecoration(color: value ? AppColors.accent : AppColors.border(0.18), borderRadius: BorderRadius.circular(100)),
                 child: AnimatedAlign(
                   duration: const Duration(milliseconds: 150),
                   alignment: value ? Alignment.centerRight : Alignment.centerLeft,
-                  child: Container(width: 30, height: 30, decoration: const BoxDecoration(color: Color(0xFF0A0C0B), shape: BoxShape.circle)),
+                  child: Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 3, offset: const Offset(0, 1))]),
+                  ),
                 ),
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _BackButton extends StatelessWidget {
-  final ThemeTokens tk;
-  final VoidCallback onTap;
-  const _BackButton({required this.tk, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: tk.cardBg,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Container(
-          width: 56,
-          height: 56,
-          decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border.all(color: tk.cardBorder, width: 1.5)),
-          child: const Icon(Icons.arrow_back, color: Color(0xFFCFD9D3), size: 26),
         ),
       ),
     );

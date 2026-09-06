@@ -1,43 +1,82 @@
-enum MsgDir { sent, recv }
+enum LangCode { en, hi, ta }
+
+extension LangCodeX on LangCode {
+  String get nativeName {
+    switch (this) {
+      case LangCode.en:
+        return 'English';
+      case LangCode.hi:
+        return 'हिन्दी';
+      case LangCode.ta:
+        return 'தமிழ்';
+    }
+  }
+
+  String get latinName {
+    switch (this) {
+      case LangCode.en:
+        return 'English';
+      case LangCode.hi:
+        return 'Hindi';
+      case LangCode.ta:
+        return 'Tamil';
+    }
+  }
+
+  String? get glyphFontFamily {
+    switch (this) {
+      case LangCode.en:
+        return null;
+      case LangCode.hi:
+        return 'NotoSansDevanagari';
+      case LangCode.ta:
+        return 'NotoSansTamil';
+    }
+  }
+}
+
+class Phrase {
+  final String native;
+  final String latin;
+  const Phrase({required this.native, required this.latin});
+}
+
+enum MsgDir { sent, received }
 
 class Message {
   final int id;
   final MsgDir dir;
-  final String tag;
-  final String text;
+  final int phraseIdx;
+  final LangCode lang;
+  final bool playing;
 
-  Message({required this.id, required this.dir, required this.tag, required this.text});
-}
-
-class LangOption {
-  final String code;
-  final String native;
-  final String latin;
-  final String glyph;
-  final String? glyphFontFamily;
-
-  const LangOption({
-    required this.code,
-    required this.native,
-    required this.latin,
-    required this.glyph,
-    this.glyphFontFamily,
+  const Message({
+    required this.id,
+    required this.dir,
+    required this.phraseIdx,
+    required this.lang,
+    this.playing = false,
   });
+
+  Message copyWith({bool? playing}) => Message(
+        id: id,
+        dir: dir,
+        phraseIdx: phraseIdx,
+        lang: lang,
+        playing: playing ?? this.playing,
+      );
 }
 
-const kLangs = [
-  LangOption(code: 'EN', native: 'English', latin: 'English', glyph: 'A'),
-  LangOption(code: 'HI', native: 'हिन्दी', latin: 'Hindi', glyph: 'अ', glyphFontFamily: 'NotoSansDevanagari'),
-  LangOption(code: 'TA', native: 'தமிழ்', latin: 'Tamil', glyph: 'அ', glyphFontFamily: 'NotoSansTamil'),
-];
+enum DeviceStatus { connected, available, outOfRange, connecting }
 
-enum DeviceLinkState { connected, available, failed }
-
-class DeviceInfo {
+class BtDevice {
+  final int id;
   final String name;
-  final String status;
-  final DeviceLinkState state;
-  final int bars;
+  final DeviceStatus status;
 
-  const DeviceInfo({required this.name, required this.status, required this.state, required this.bars});
+  const BtDevice({required this.id, required this.name, required this.status});
+
+  BtDevice copyWith({DeviceStatus? status}) => BtDevice(id: id, name: name, status: status ?? this.status);
 }
+
+enum ScriptMode { both, native, latin }

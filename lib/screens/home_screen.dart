@@ -12,252 +12,166 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
-    final tk = app.themeMode == AppThemeMode.dark ? ThemeTokens.dark : ThemeTokens.light;
+    final connected = app.connectedDevice;
+    final playing = app.playingMessage;
 
     return Container(
-      color: tk.bg,
+      color: AppColors.surface,
       child: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+            decoration: BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.border(0.08)))),
             child: Row(
               children: [
                 Expanded(
-                  child: _DeviceChip(app: app, tk: tk),
+                  child: InkWell(
+                    onTap: () => app.setTab(AppTab.devices),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 9,
+                          height: 9,
+                          decoration: BoxDecoration(shape: BoxShape.circle, color: connected != null ? AppColors.success : const Color(0xFFB9B9B4)),
+                        ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                connected?.name ?? 'No device paired',
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontFamily: appFont, fontWeight: FontWeight.w600, fontSize: 13.5, color: AppColors.textPrimary),
+                              ),
+                              Text(
+                                connected != null ? 'Connected' : 'Not connected',
+                                style: TextStyle(fontFamily: appFont, fontSize: 11, color: AppColors.textSecondary(0.5)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
                 const SizedBox(width: 10),
-                _SquareIconButton(
-                  icon: Icons.settings_outlined,
-                  tk: tk,
-                  onTap: app.goSettings,
+                Material(
+                  color: AppColors.accentSoft,
+                  borderRadius: BorderRadius.circular(100),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(100),
+                    onTap: app.openLangSheet,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                      decoration: BoxDecoration(borderRadius: BorderRadius.circular(100), border: Border.all(color: AppColors.accent.withValues(alpha: 0.3))),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(app.langMine.latinName, style: const TextStyle(fontFamily: appFont, fontWeight: FontWeight.w600, fontSize: 12.5, color: AppColors.accent)),
+                          const Padding(padding: EdgeInsets.symmetric(horizontal: 6), child: Icon(Icons.arrow_forward, size: 14, color: AppColors.accent)),
+                          Text(app.langTheirs.latinName, style: const TextStyle(fontFamily: appFont, fontWeight: FontWeight.w600, fontSize: 12.5, color: AppColors.accent)),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-            child: _LangPairButton(app: app, tk: tk),
-          ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              child: _TranscriptPanel(app: app, tk: tk),
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+            child: Material(
+              color: AppColors.danger,
+              borderRadius: BorderRadius.circular(14),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: app.triggerEmergency,
+                child: Container(
+                  constraints: const BoxConstraints(minHeight: 56),
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: const [
+                      Icon(Icons.campaign_outlined, color: Colors.white, size: 18),
+                      SizedBox(width: 8),
+                      Text('Emergency Broadcast', style: TextStyle(fontFamily: appFont, fontWeight: FontWeight.w700, fontSize: 14, color: Colors.white, letterSpacing: 0.2)),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
-          SizedBox(
-            height: 64,
-            child: Center(child: _StatusArea(app: app)),
-          ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-            child: _ControlRow(app: app, tk: tk),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                InkWell(
+                  onTap: app.toggleScriptMode,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(borderRadius: BorderRadius.circular(100), border: Border.all(color: AppColors.border(0.12))),
+                    child: Text('Text: ${_scriptModeLabel(app.scriptMode)}', style: TextStyle(fontFamily: appFont, fontSize: 11, color: AppColors.textSecondary(0.45))),
+                  ),
+                ),
+              ],
+            ),
           ),
-          SizedBox(
-            height: 22,
-            child: !app.isRec
-                ? Center(
-                    child: Text(
-                      'SLIDE UP TO LOCK · LONG-PRESS FOR ALERT',
-                      style: TextStyle(
-                        fontFamily: mono,
-                        fontSize: 11,
-                        letterSpacing: 1.1,
-                        color: const Color(0xFF5C6862),
+          if (playing != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(color: AppColors.accentSoft, borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.accent.withValues(alpha: 0.25))),
+                child: Row(
+                  children: [
+                    const _PulsingIcon(),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Playing message from ${connected?.name ?? 'device'}',
+                        style: const TextStyle(fontFamily: appFont, fontSize: 12.5, fontWeight: FontWeight.w500, color: AppColors.textPrimary),
                       ),
                     ),
-                  )
-                : null,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DeviceChip extends StatelessWidget {
-  final AppState app;
-  final ThemeTokens tk;
-  const _DeviceChip({required this.app, required this.tk});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: tk.cardBg,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: app.goPairing,
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 60),
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: tk.cardBorder, width: 1.5),
-          ),
-          child: Row(
-            children: [
-              _SignalBars(litCount: 3, color: AppColors.green),
-              const SizedBox(width: 11),
-              Expanded(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      kPairedDeviceName,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontFamily: barlow, fontWeight: FontWeight.w600, fontSize: 17, color: tk.text),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'LINKED',
-                      style: TextStyle(fontFamily: mono, fontWeight: FontWeight.w500, fontSize: 11, letterSpacing: 1.2, color: AppColors.green),
+                    InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: () => app.replay(playing.id),
+                      child: Container(
+                        width: 28,
+                        height: 28,
+                        decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                        child: const Icon(Icons.refresh, size: 14, color: AppColors.accent),
+                      ),
                     ),
                   ],
                 ),
               ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SignalBars extends StatelessWidget {
-  final int litCount; // out of 4
-  final Color color;
-  final Color dim;
-  const _SignalBars({required this.litCount, required this.color, this.dim = const Color(0xFF2C3A32)});
-
-  @override
-  Widget build(BuildContext context) {
-    final heights = [7.0, 12.0, 17.0, 22.0];
-    return SizedBox(
-      height: 22,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        mainAxisSize: MainAxisSize.min,
-        children: List.generate(4, (i) {
-          return Padding(
-            padding: const EdgeInsets.only(right: 3),
-            child: Container(
-              width: 4,
-              height: heights[i],
-              decoration: BoxDecoration(
-                color: i < litCount ? color : dim,
-                borderRadius: BorderRadius.circular(1),
-              ),
             ),
-          );
-        }),
-      ),
-    );
-  }
-}
-
-class _SquareIconButton extends StatelessWidget {
-  final IconData icon;
-  final ThemeTokens tk;
-  final VoidCallback onTap;
-  const _SquareIconButton({required this.icon, required this.tk, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: tk.cardBg,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Container(
-          width: 60,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: tk.cardBorder, width: 1.5),
-          ),
-          child: Icon(icon, color: const Color(0xFFC8D3CC), size: 26),
-        ),
-      ),
-    );
-  }
-}
-
-class _LangPairButton extends StatelessWidget {
-  final AppState app;
-  final ThemeTokens tk;
-  const _LangPairButton({required this.app, required this.tk});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: tk.panelBg,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: app.openLang,
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 66),
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: tk.cardBorder, width: 1.5),
-          ),
-          child: Row(
-            children: [
-              Text(app.src, style: TextStyle(fontFamily: barlow, fontWeight: FontWeight.w700, fontSize: 26, color: tk.text)),
-              const SizedBox(width: 14),
-              const Icon(Icons.arrow_forward, color: AppColors.amber, size: 22),
-              const SizedBox(width: 14),
-              Text(app.dst, style: const TextStyle(fontFamily: barlow, fontWeight: FontWeight.w700, fontSize: 26, color: AppColors.amber)),
-              const Spacer(),
-              const Icon(Icons.keyboard_arrow_down, color: Color(0xFF6F7D76), size: 22),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _TranscriptPanel extends StatelessWidget {
-  final AppState app;
-  final ThemeTokens tk;
-  const _TranscriptPanel({required this.app, required this.tk});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: tk.panelBg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: tk.panelBorder, width: 1.5),
-      ),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
-            decoration: BoxDecoration(border: Border(bottom: BorderSide(color: tk.panelBorder, width: 1.5))),
-            child: Row(
-              children: [
-                Text(
-                  'TRANSCRIPT · CONFIRMATION ONLY',
-                  style: TextStyle(fontFamily: mono, fontWeight: FontWeight.w500, fontSize: 10.5, letterSpacing: 1.3, color: const Color(0xFF66736C)),
-                ),
-                const Spacer(),
-                if (app.isIncoming) const _PlayingIndicator(),
-              ],
-            ),
-          ),
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.all(13),
+              padding: const EdgeInsets.all(16),
+              children: [for (final m in app.messages) _MessageBubble(m: m)],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 18, 16, 14),
+            decoration: BoxDecoration(border: Border(top: BorderSide(color: AppColors.border(0.06)))),
+            child: Column(
               children: [
-                for (final m in app.messages) ...[
-                  _MessageBubble(m: m),
-                  const SizedBox(height: 11),
-                ],
-                if (app.isRec) _ListeningBubble(partial: app.partial.isEmpty ? '…' : app.partial),
+                Text(
+                  app.recording ? 'Recording — release to send' : 'Hold to talk',
+                  style: TextStyle(fontFamily: appFont, fontSize: 12.5, fontWeight: FontWeight.w500, color: AppColors.textSecondary(0.5)),
+                ),
+                const SizedBox(height: 8),
+                _PttButton(app: app),
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 16,
+                  child: app.recording ? const WaveBars(color: AppColors.accent, barCount: 5, barWidth: 3, maxHeight: 16) : null,
+                ),
               ],
             ),
           ),
@@ -265,15 +179,26 @@ class _TranscriptPanel extends StatelessWidget {
       ),
     );
   }
+
+  String _scriptModeLabel(ScriptMode m) {
+    switch (m) {
+      case ScriptMode.both:
+        return 'Both';
+      case ScriptMode.native:
+        return 'Native script';
+      case ScriptMode.latin:
+        return 'Latin script';
+    }
+  }
 }
 
-class _PlayingIndicator extends StatefulWidget {
-  const _PlayingIndicator();
+class _PulsingIcon extends StatefulWidget {
+  const _PulsingIcon();
   @override
-  State<_PlayingIndicator> createState() => _PlayingIndicatorState();
+  State<_PulsingIcon> createState() => _PulsingIconState();
 }
 
-class _PlayingIndicatorState extends State<_PlayingIndicator> with SingleTickerProviderStateMixin {
+class _PulsingIconState extends State<_PulsingIcon> with SingleTickerProviderStateMixin {
   late final AnimationController _c;
   @override
   void initState() {
@@ -289,26 +214,11 @@ class _PlayingIndicatorState extends State<_PlayingIndicator> with SingleTickerP
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        FadeTransition(
-          opacity: Tween(begin: 1.0, end: 0.15).animate(_c),
-          child: const _Dot(color: AppColors.amber, size: 8),
-        ),
-        const SizedBox(width: 6),
-        const Text('PLAYING', style: TextStyle(fontFamily: mono, fontWeight: FontWeight.w600, fontSize: 10.5, letterSpacing: 1.1, color: AppColors.amber)),
-      ],
+    return FadeTransition(
+      opacity: Tween(begin: 1.0, end: 0.35).animate(_c),
+      child: const Icon(Icons.volume_up, size: 18, color: AppColors.accent),
     );
   }
-}
-
-class _Dot extends StatelessWidget {
-  final Color color;
-  final double size;
-  const _Dot({required this.color, required this.size});
-  @override
-  Widget build(BuildContext context) => Container(width: size, height: size, decoration: BoxDecoration(color: color, shape: BoxShape.circle));
 }
 
 class _MessageBubble extends StatelessWidget {
@@ -317,175 +227,79 @@ class _MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isSent = m.dir == MsgDir.sent;
-    return Align(
-      alignment: isSent ? Alignment.centerRight : Alignment.centerLeft,
-      child: Column(
-        crossAxisAlignment: isSent ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-        children: [
-          if (isSent)
-            Row(
+    final app = context.read<AppState>();
+    final sent = m.dir == MsgDir.sent;
+    final phrase = app.phraseFor(m.phraseIdx, m.lang);
+    final showBoth = app.scriptMode == ScriptMode.both && m.lang != LangCode.en;
+    final showLatinOnly = app.scriptMode == ScriptMode.latin && m.lang != LangCode.en;
+    final primary = showLatinOnly ? phrase.latin : phrase.native;
+    final secondary = showBoth ? phrase.latin : null;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Align(
+        alignment: sent ? Alignment.centerRight : Alignment.centerLeft,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
+            decoration: BoxDecoration(
+              color: sent ? AppColors.accent : AppColors.card,
+              borderRadius: BorderRadius.circular(16),
+              border: sent ? null : Border.all(color: AppColors.border(0.08)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(m.tag, style: const TextStyle(fontFamily: mono, fontWeight: FontWeight.w500, fontSize: 10, letterSpacing: 1.0, color: Color(0xFF5F6C65))),
-                const SizedBox(width: 6),
-                const Icon(Icons.check, size: 13, color: Color(0xFF5F6C65)),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      sent ? Icons.mic : Icons.volume_up,
+                      size: 12,
+                      color: sent ? Colors.white : AppColors.accent,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      sent ? 'YOU' : 'THEM',
+                      style: TextStyle(
+                        fontFamily: appFont,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 10.5,
+                        letterSpacing: 0.4,
+                        color: sent ? Colors.white.withValues(alpha: 0.75) : AppColors.textSecondary(0.45),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  primary,
+                  style: TextStyle(
+                    fontFamily: m.lang.glyphFontFamily ?? appFont,
+                    fontSize: 14.5,
+                    height: 1.35,
+                    color: sent ? Colors.white : AppColors.textPrimary,
+                  ),
+                ),
+                if (secondary != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      secondary,
+                      style: TextStyle(
+                        fontFamily: appFont,
+                        fontSize: 12,
+                        height: 1.3,
+                        fontStyle: FontStyle.italic,
+                        color: sent ? Colors.white.withValues(alpha: 0.7) : AppColors.textSecondary(0.5),
+                      ),
+                    ),
+                  ),
               ],
-            )
-          else
-            Text(m.tag, style: const TextStyle(fontFamily: mono, fontWeight: FontWeight.w500, fontSize: 10, letterSpacing: 1.0, color: AppColors.amber)),
-          const SizedBox(height: 5),
-          ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.6),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
-              decoration: BoxDecoration(
-                color: isSent ? const Color(0xFF1C2620) : AppColors.amberSoftBg,
-                border: Border.all(color: isSent ? const Color(0xFF2B3830) : AppColors.amberSoftBorder, width: 1.5),
-                borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(11),
-                  topRight: const Radius.circular(11),
-                  bottomLeft: Radius.circular(isSent ? 11 : 3),
-                  bottomRight: Radius.circular(isSent ? 3 : 11),
-                ),
-              ),
-              child: Text(
-                m.text,
-                style: TextStyle(
-                  fontFamily: barlow,
-                  fontWeight: isSent ? FontWeight.w500 : FontWeight.w600,
-                  fontSize: isSent ? 18 : 19,
-                  height: 1.32,
-                  color: isSent ? const Color(0xFFDFE8E2) : const Color(0xFFF6EFE0),
-                ),
-              ),
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ListeningBubble extends StatelessWidget {
-  final String partial;
-  const _ListeningBubble({required this.partial});
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerRight,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          const Text('LISTENING…', style: TextStyle(fontFamily: mono, fontWeight: FontWeight.w500, fontSize: 10, letterSpacing: 1.0, color: AppColors.red)),
-          const SizedBox(height: 5),
-          ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.6),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
-              decoration: BoxDecoration(
-                color: const Color(0xFF241A1A),
-                border: Border.all(color: AppColors.red, width: 1.5),
-                borderRadius: const BorderRadius.only(topLeft: Radius.circular(11), topRight: Radius.circular(11), bottomLeft: Radius.circular(3), bottomRight: Radius.circular(11)),
-              ),
-              child: Text(partial, style: const TextStyle(fontFamily: barlow, fontWeight: FontWeight.w500, fontSize: 18, height: 1.32, color: Color(0xFFE8D8D6))),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatusArea extends StatelessWidget {
-  final AppState app;
-  const _StatusArea({required this.app});
-
-  @override
-  Widget build(BuildContext context) {
-    if (app.isRec) {
-      return const WaveBars(color: AppColors.red, maxHeight: 44);
-    }
-    if (app.isIncoming) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-        decoration: BoxDecoration(
-          color: const Color(0xFF423823),
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: const Color(0xFF6B562F), width: 1.5),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: const [
-            Icon(Icons.volume_up, color: AppColors.amberGlyph, size: 22),
-            SizedBox(width: 10),
-            Text('Replaying audio…', style: TextStyle(fontFamily: barlow, fontWeight: FontWeight.w600, fontSize: 15, color: Color(0xFFF6EFE0))),
-          ],
-        ),
-      );
-    }
-    return const Text(
-      'HOLD TO TALK',
-      style: TextStyle(fontFamily: mono, fontWeight: FontWeight.w500, fontSize: 12, letterSpacing: 1.6, color: Color(0xFF5C6862)),
-    );
-  }
-}
-
-class _ControlRow extends StatelessWidget {
-  final AppState app;
-  final ThemeTokens tk;
-  const _ControlRow({required this.app, required this.tk});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        _CircleButton(
-          size: 74,
-          bg: tk.cardBg,
-          border: const Color(0xFF2B3830),
-          icon: Icons.play_arrow,
-          iconColor: const Color(0xFFCFD9D3),
-          onTap: app.replay,
-        ),
-        _PttButton(app: app),
-        _CircleButton(
-          size: 74,
-          bg: AppColors.redSoftBg,
-          border: AppColors.redSoftBorder,
-          icon: Icons.warning_amber_rounded,
-          iconColor: AppColors.redGlyph,
-          onTap: app.beginConfirm,
-        ),
-      ],
-    );
-  }
-}
-
-class _CircleButton extends StatelessWidget {
-  final double size;
-  final Color bg;
-  final Color border;
-  final IconData icon;
-  final Color iconColor;
-  final VoidCallback onTap;
-  const _CircleButton({required this.size, required this.bg, required this.border, required this.icon, required this.iconColor, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: bg,
-      shape: const CircleBorder(),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: border, width: 2)),
-          child: Icon(icon, color: iconColor, size: size * 0.46),
         ),
       ),
     );
@@ -506,7 +320,7 @@ class _PttButtonState extends State<_PttButton> with SingleTickerProviderStateMi
   @override
   void initState() {
     super.initState();
-    _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500))..repeat();
+    _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400))..repeat();
   }
 
   @override
@@ -519,51 +333,61 @@ class _PttButtonState extends State<_PttButton> with SingleTickerProviderStateMi
   Widget build(BuildContext context) {
     final app = widget.app;
     return SizedBox(
-      width: 186,
-      height: 186,
+      width: 104,
+      height: 104,
       child: Stack(
         alignment: Alignment.center,
         children: [
-          if (app.isRec)
-            AnimatedBuilder(
-              animation: _pulse,
-              builder: (context, _) {
-                final t = _pulse.value;
-                final scale = 1 + 0.55 * t;
-                final opacity = (1 - t) * 0.55;
-                return Opacity(
-                  opacity: opacity.clamp(0.0, 1.0),
-                  child: Transform.scale(
-                    scale: scale,
-                    child: Container(
-                      width: 186,
-                      height: 186,
-                      decoration: const BoxDecoration(color: AppColors.red, shape: BoxShape.circle),
-                    ),
-                  ),
-                );
-              },
-            ),
+          if (app.recording) ...[
+            _PulseRing(controller: _pulse, delay: 0),
+            _PulseRing(controller: _pulse, delay: 0.36),
+          ],
           GestureDetector(
-            onTapDown: (_) => app.startRec(),
-            onTapUp: (_) => app.stopRec(),
-            onTapCancel: () => app.stopRec(),
-            child: Container(
-              width: 186,
-              height: 186,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: app.isRec ? AppColors.red : AppColors.amber,
-                boxShadow: const [
-                  BoxShadow(color: Colors.black45, offset: Offset(0, 10)),
-                ],
-                border: Border.all(color: Colors.black.withValues(alpha: 0.28), width: 7),
+            onTapDown: (_) => app.startRecording(),
+            onTapUp: (_) => app.stopRecording(),
+            onTapCancel: () => app.stopRecording(),
+            child: AnimatedScale(
+              scale: app.recording ? 1.06 : 1.0,
+              duration: const Duration(milliseconds: 120),
+              child: Container(
+                width: 96,
+                height: 96,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: app.recording ? AppColors.accentDark : AppColors.accent,
+                  boxShadow: [BoxShadow(color: AppColors.accent.withValues(alpha: 0.35), blurRadius: 20, offset: const Offset(0, 8))],
+                ),
+                child: const Icon(Icons.mic, color: Colors.white, size: 34),
               ),
-              child: const Icon(Icons.mic, color: Color(0xFF0A0C0B), size: 78),
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _PulseRing extends StatelessWidget {
+  final AnimationController controller;
+  final double delay;
+  const _PulseRing({required this.controller, required this.delay});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final t = (controller.value + delay) % 1.0;
+        final scale = 1 + 0.9 * t;
+        final opacity = (0.45 * (1 - t)).clamp(0.0, 1.0);
+        return Opacity(
+          opacity: opacity,
+          child: Transform.scale(
+            scale: scale,
+            child: Container(width: 104, height: 104, decoration: const BoxDecoration(color: AppColors.accent, shape: BoxShape.circle)),
+          ),
+        );
+      },
     );
   }
 }
