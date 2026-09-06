@@ -6,6 +6,7 @@ import '../models.dart';
 import '../services/bluetooth_manager.dart';
 import '../theme.dart';
 import '../widgets/wave_bars.dart';
+import 'alert_history_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -80,6 +81,8 @@ class HomeScreen extends StatelessWidget {
                     ),
                   ),
                 ),
+                const SizedBox(width: 8),
+                _AlertsButton(app: app),
               ],
             ),
           ),
@@ -192,6 +195,50 @@ class HomeScreen extends StatelessWidget {
       case ScriptMode.latin:
         return 'Latin script';
     }
+  }
+}
+
+class _AlertsButton extends StatelessWidget {
+  final AppState app;
+  const _AlertsButton({required this.app});
+
+  @override
+  Widget build(BuildContext context) {
+    final count = app.alertHistory.length;
+    return Material(
+      color: AppColors.dangerSoft,
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AlertHistoryScreen())),
+        child: SizedBox(
+          width: 40,
+          height: 40,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: [
+              const Icon(Icons.account_balance, color: AppColors.danger, size: 18),
+              if (count > 0)
+                Positioned(
+                  top: 1,
+                  right: 3,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    constraints: const BoxConstraints(minWidth: 14),
+                    decoration: const BoxDecoration(color: AppColors.danger, shape: BoxShape.circle),
+                    child: Text(
+                      count > 9 ? '9+' : '$count',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontFamily: appFont, fontSize: 9, fontWeight: FontWeight.w700, color: Colors.white),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
