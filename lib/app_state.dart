@@ -127,6 +127,15 @@ class AppState extends ChangeNotifier {
     _addTimer(const Duration(milliseconds: 1100), receiveReply);
   }
 
+  void sendTypedMessage(String text) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return;
+    final msg = Message(id: DateTime.now().millisecondsSinceEpoch, dir: MsgDir.sent, phraseIdx: 0, lang: langMine, customText: trimmed);
+    messages = [...messages, msg];
+    notifyListeners();
+    _addTimer(const Duration(milliseconds: 1100), receiveReply);
+  }
+
   void receiveReply() {
     final idx = nextPhrase;
     final id = DateTime.now().millisecondsSinceEpoch + 1;
