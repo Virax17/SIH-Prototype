@@ -1,6 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'models.dart';
+
+const _alertHistoryKey = 'itantra.alerts.history';
 
 enum AppTab { home, devices, settings }
 
@@ -56,7 +62,34 @@ class AppState extends ChangeNotifier {
   double emergencyProgress = 0;
   bool emergencyDone = false;
 
+  List<EmergencyAlertRecord> alertHistory = [];
+
   final List<Timer> _timers = [];
+
+  AppState() {
+    _loadAlertHistory();
+  }
+
+  Future<void> _loadAlertHistory() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getStringList(_alertHistoryKey) ?? [];
+      alertHistory = raw.map((s) => EmergencyAlertRecord.fromJson(jsonDecode(s) as Map<String, dynamic>)).toList()
+        ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      notifyListeners();
+    } catch (_) {
+      alertHistory = [];
+    }
+  }
+
+  Future<void> _saveAlertHistory() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_alertHistoryKey, alertHistory.map((a) => jsonEncode(a.toJson())).toList());
+    } catch (_) {
+      // Non-fatal: the log just won't persist across restarts this time.
+    }
+  }
 
   Timer _addTimer(Duration d, void Function() fn) {
     final t = Timer(d, fn);
@@ -165,6 +198,14 @@ class AppState extends ChangeNotifier {
     showEmergency = true;
     emergencyProgress = 0;
     emergencyDone = false;
+
+    final msg = kEmergencyMessage[langMine] ?? kEmergencyMessage[LangCode.en]!;
+    alertHistory = [
+      EmergencyAlertRecord(id: DateTime.now().millisecondsSinceEpoch, dir: MsgDir.sent, native: msg.native, latin: msg.latin, timestamp: DateTime.now()),
+      ...alertHistory,
+    ];
+    unawaited(_saveAlertHistory());
+
     notifyListeners();
     const duration = Duration(milliseconds: 3000);
     final start = DateTime.now();
