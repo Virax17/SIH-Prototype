@@ -5,6 +5,7 @@ import '../app_state.dart';
 import '../models.dart';
 import '../services/bluetooth_manager.dart';
 import '../theme.dart';
+import 'alert_history_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -101,6 +102,15 @@ class SettingsScreen extends StatelessWidget {
                   icon: Text('Aa', style: TextStyle(fontFamily: appFont, fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textSecondary(0.55))),
                   title: 'Transcript text',
                   subtitle: 'Voice is primary — text is shown as: ${_scriptModeLabel(app.scriptMode)}',
+                  trailing: true,
+                ),
+                const SizedBox(height: 8),
+                _SettingsRow(
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AlertHistoryScreen())),
+                  iconBg: AppColors.dangerSoft,
+                  icon: const Icon(Icons.account_balance, color: AppColors.danger, size: 17),
+                  title: 'Alert history',
+                  subtitle: app.alertHistory.isEmpty ? 'No alerts logged yet' : '${app.alertHistory.length} alert${app.alertHistory.length == 1 ? '' : 's'} logged · kept permanently',
                   trailing: true,
                 ),
                 const Padding(

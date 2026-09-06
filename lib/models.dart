@@ -68,3 +68,37 @@ class Message {
 }
 
 enum ScriptMode { both, native, latin }
+
+/// A permanent local record of a government emergency broadcast that was
+/// sent or received. Never auto-deleted — the log is the point.
+class EmergencyAlertRecord {
+  final int id;
+  final MsgDir dir;
+  final String native;
+  final String latin;
+  final DateTime timestamp;
+
+  const EmergencyAlertRecord({
+    required this.id,
+    required this.dir,
+    required this.native,
+    required this.latin,
+    required this.timestamp,
+  });
+
+  factory EmergencyAlertRecord.fromJson(Map<String, dynamic> j) => EmergencyAlertRecord(
+        id: j['id'] as int,
+        dir: MsgDir.values.byName(j['dir'] as String),
+        native: j['native'] as String,
+        latin: j['latin'] as String,
+        timestamp: DateTime.parse(j['timestamp'] as String),
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'dir': dir.name,
+        'native': native,
+        'latin': latin,
+        'timestamp': timestamp.toIso8601String(),
+      };
+}
