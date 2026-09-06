@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 
 import '../app_state.dart';
 import '../theme.dart';
-import 'wave_bars.dart';
 
 class EmergencyScreen extends StatefulWidget {
   const EmergencyScreen({super.key});
@@ -12,115 +11,123 @@ class EmergencyScreen extends StatefulWidget {
   State<EmergencyScreen> createState() => _EmergencyScreenState();
 }
 
-class _EmergencyScreenState extends State<EmergencyScreen> with TickerProviderStateMixin {
+class _EmergencyScreenState extends State<EmergencyScreen> with SingleTickerProviderStateMixin {
   late final AnimationController _siren;
-  late final AnimationController _bar;
 
   @override
   void initState() {
     super.initState();
-    _siren = AnimationController(vsync: this, duration: const Duration(milliseconds: 550))..repeat(reverse: true);
-    _bar = AnimationController(vsync: this, duration: const Duration(seconds: 5))..repeat();
+    _siren = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))..repeat();
   }
 
   @override
   void dispose() {
     _siren.dispose();
-    _bar.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
+    final msg = kEmergencyMessage[app.langMine]!;
 
-    return AnimatedBuilder(
-      animation: _siren,
-      builder: (context, child) {
-        final bg = Color.lerp(AppColors.sirenA, AppColors.sirenB, _siren.value)!;
-        return Container(color: bg, child: child);
-      },
+    return Container(
+      color: AppColors.danger,
+      padding: const EdgeInsets.all(32),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-            child: Row(
+          SizedBox(
+            width: 100,
+            height: 100,
+            child: Stack(
+              alignment: Alignment.center,
               children: [
-                const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 34),
-                const SizedBox(width: 12),
-                const Text('PRIORITY', style: TextStyle(fontFamily: barlow, fontWeight: FontWeight.w800, fontSize: 26, color: Colors.white, letterSpacing: 1.2)),
-                const Spacer(),
-                Text('MAX VOLUME', style: TextStyle(fontFamily: mono, fontWeight: FontWeight.w600, fontSize: 12, letterSpacing: 1.2, color: Colors.white.withValues(alpha: 0.8))),
+                _SirenRing(controller: _siren, delay: 0),
+                _SirenRing(controller: _siren, delay: 0.33),
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                  child: const Icon(Icons.warning_amber_rounded, color: AppColors.danger, size: 40),
+                ),
               ],
             ),
           ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 22),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const SizedBox(height: 74, child: WaveBars(color: Colors.white, barWidth: 9, maxHeight: 74)),
-                  const SizedBox(height: 26),
-                  Text(
-                    'From $kPairedDeviceName · TA → EN',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontFamily: mono, fontWeight: FontWeight.w500, fontSize: 12, letterSpacing: 1.3, color: Colors.white.withValues(alpha: 0.82)),
-                  ),
-                  const SizedBox(height: 26),
-                  const Text(
-                    'Rockfall on the north track. Do not proceed. Hold at marker 4.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontFamily: barlow, fontWeight: FontWeight.w700, fontSize: 40, height: 1.14, color: Colors.white),
-                  ),
-                ],
+          const SizedBox(height: 28),
+          Text('EMERGENCY ALERT', style: TextStyle(fontFamily: appFont, fontWeight: FontWeight.w700, fontSize: 12, letterSpacing: 1.3, color: Colors.white.withValues(alpha: 0.85))),
+          const SizedBox(height: 8),
+          Text(
+            msg.native,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontFamily: appFont, fontWeight: FontWeight.w700, fontSize: 22, height: 1.3, color: Colors.white),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            msg.latin,
+            textAlign: TextAlign.center,
+            style: TextStyle(fontFamily: appFont, fontSize: 14, fontStyle: FontStyle.italic, color: Colors.white.withValues(alpha: 0.8)),
+          ),
+          const SizedBox(height: 28),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 280),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(3),
+              child: Container(
+                height: 6,
+                color: Colors.white.withValues(alpha: 0.25),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: FractionallySizedBox(widthFactor: app.emergencyProgress / 100, child: Container(color: Colors.white)),
+                ),
               ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(22, 0, 22, 26),
-            child: Column(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: Container(
-                    height: 8,
-                    color: Colors.black.withValues(alpha: 0.3),
-                    child: AnimatedBuilder(
-                      animation: _bar,
-                      builder: (context, _) => Align(
-                        alignment: Alignment.centerLeft,
-                        child: FractionallySizedBox(widthFactor: _bar.value, child: Container(color: Colors.white)),
-                      ),
-                    ),
-                  ),
+          const SizedBox(height: 10),
+          Text('Playing at maximum volume…', style: TextStyle(fontFamily: appFont, fontSize: 12.5, color: Colors.white.withValues(alpha: 0.75))),
+          const SizedBox(height: 24),
+          if (app.emergencyDone)
+            Material(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(100),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(100),
+                onTap: app.acknowledgeEmergency,
+                child: Container(
+                  constraints: const BoxConstraints(minHeight: 56),
+                  padding: const EdgeInsets.symmetric(horizontal: 36),
+                  alignment: Alignment.center,
+                  child: const Text('Acknowledge', style: TextStyle(fontFamily: appFont, fontWeight: FontWeight.w700, fontSize: 15, color: AppColors.danger)),
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  'PLAYBACK LOCKED · 5s',
-                  style: TextStyle(fontFamily: mono, fontWeight: FontWeight.w600, fontSize: 13, letterSpacing: 1.0, color: Colors.white.withValues(alpha: 0.85)),
-                ),
-                const SizedBox(height: 12),
-                Material(
-                  color: Colors.black.withValues(alpha: 0.35),
-                  borderRadius: BorderRadius.circular(14),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(14),
-                    onTap: app.ackEmergency,
-                    child: Container(
-                      constraints: const BoxConstraints(minHeight: 76),
-                      decoration: BoxDecoration(borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.white.withValues(alpha: 0.55), width: 2)),
-                      child: const Center(
-                        child: Text('ACKNOWLEDGE', style: TextStyle(fontFamily: barlow, fontWeight: FontWeight.w700, fontSize: 22, letterSpacing: 0.6, color: Colors.white)),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
         ],
       ),
+    );
+  }
+}
+
+class _SirenRing extends StatelessWidget {
+  final AnimationController controller;
+  final double delay;
+  const _SirenRing({required this.controller, required this.delay});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final t = (controller.value + delay) % 1.0;
+        final scale = 1 + t;
+        final opacity = (0.55 * (1 - t)).clamp(0.0, 1.0);
+        return Opacity(
+          opacity: opacity,
+          child: Transform.scale(
+            scale: scale,
+            child: Container(width: 100, height: 100, decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle)),
+          ),
+        );
+      },
     );
   }
 }
