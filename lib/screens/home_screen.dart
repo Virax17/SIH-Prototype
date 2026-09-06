@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../app_state.dart';
 import '../models.dart';
+import '../services/bluetooth_manager.dart';
 import '../theme.dart';
 import '../widgets/wave_bars.dart';
 
@@ -12,7 +13,8 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
-    final connected = app.connectedDevice;
+    final bt = context.watch<BluetoothManager>();
+    final connected = bt.connectedDevice;
     final playing = app.playingMessage;
 
     return Container(
@@ -42,7 +44,7 @@ class HomeScreen extends StatelessWidget {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                connected?.name ?? 'No device paired',
+                                connected?.displayName ?? 'No device paired',
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(fontFamily: appFont, fontWeight: FontWeight.w600, fontSize: 13.5, color: AppColors.textPrimary),
                               ),
@@ -132,7 +134,7 @@ class HomeScreen extends StatelessWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'Playing message from ${connected?.name ?? 'device'}',
+                        'Playing message from ${connected?.displayName ?? 'device'}',
                         style: const TextStyle(fontFamily: appFont, fontSize: 12.5, fontWeight: FontWeight.w500, color: AppColors.textPrimary),
                       ),
                     ),
