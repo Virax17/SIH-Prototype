@@ -50,12 +50,18 @@ class Message {
   final LangCode lang;
   final bool playing;
 
+  /// Set when this message was typed by hand rather than spoken (or
+  /// simulated from [kPhrases]) — shown verbatim instead of looking up a
+  /// canned phrase by [phraseIdx].
+  final String? customText;
+
   const Message({
     required this.id,
     required this.dir,
     required this.phraseIdx,
     required this.lang,
     this.playing = false,
+    this.customText,
   });
 
   Message copyWith({bool? playing}) => Message(
@@ -64,19 +70,42 @@ class Message {
         phraseIdx: phraseIdx,
         lang: lang,
         playing: playing ?? this.playing,
+        customText: customText,
       );
 }
 
-enum DeviceStatus { connected, available, outOfRange, connecting }
-
-class BtDevice {
-  final int id;
-  final String name;
-  final DeviceStatus status;
-
-  const BtDevice({required this.id, required this.name, required this.status});
-
-  BtDevice copyWith({DeviceStatus? status}) => BtDevice(id: id, name: name, status: status ?? this.status);
-}
-
 enum ScriptMode { both, native, latin }
+
+/// A permanent local record of a government emergency broadcast that was
+/// sent or received. Never auto-deleted — the log is the point.
+class EmergencyAlertRecord {
+  final int id;
+  final MsgDir dir;
+  final String native;
+  final String latin;
+  final DateTime timestamp;
+
+  const EmergencyAlertRecord({
+    required this.id,
+    required this.dir,
+    required this.native,
+    required this.latin,
+    required this.timestamp,
+  });
+
+  factory EmergencyAlertRecord.fromJson(Map<String, dynamic> j) => EmergencyAlertRecord(
+        id: j['id'] as int,
+        dir: MsgDir.values.byName(j['dir'] as String),
+        native: j['native'] as String,
+        latin: j['latin'] as String,
+        timestamp: DateTime.parse(j['timestamp'] as String),
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'dir': dir.name,
+        'native': native,
+        'latin': latin,
+        'timestamp': timestamp.toIso8601String(),
+      };
+}

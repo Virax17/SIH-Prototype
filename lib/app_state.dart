@@ -1,6 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'models.dart';
+
+const _alertHistoryKey = 'itantra.alerts.history';
 
 enum AppTab { home, devices, settings }
 
@@ -50,33 +56,45 @@ class AppState extends ChangeNotifier {
   ScriptMode scriptMode = ScriptMode.both;
   bool showLangSheet = false;
 
-  List<BtDevice> devices = const [
-    BtDevice(id: 1, name: "Vinay's Phone", status: DeviceStatus.connected),
-    BtDevice(id: 2, name: 'Pranay Phone', status: DeviceStatus.available),
-    BtDevice(id: 3, name: 'Umesh Phone', status: DeviceStatus.outOfRange),
-    BtDevice(id: 4, name: "Ved's iPhone", status: DeviceStatus.outOfRange),
-  ];
-  bool scanning = false;
-
   double volume = 80;
   bool emergencyEnabled = true;
   bool showEmergency = false;
   double emergencyProgress = 0;
   bool emergencyDone = false;
 
+  List<EmergencyAlertRecord> alertHistory = [];
+
   final List<Timer> _timers = [];
+
+  AppState() {
+    _loadAlertHistory();
+  }
+
+  Future<void> _loadAlertHistory() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getStringList(_alertHistoryKey) ?? [];
+      alertHistory = raw.map((s) => EmergencyAlertRecord.fromJson(jsonDecode(s) as Map<String, dynamic>)).toList()
+        ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      notifyListeners();
+    } catch (_) {
+      alertHistory = [];
+    }
+  }
+
+  Future<void> _saveAlertHistory() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_alertHistoryKey, alertHistory.map((a) => jsonEncode(a.toJson())).toList());
+    } catch (_) {
+      // Non-fatal: the log just won't persist across restarts this time.
+    }
+  }
 
   Timer _addTimer(Duration d, void Function() fn) {
     final t = Timer(d, fn);
     _timers.add(t);
     return t;
-  }
-
-  BtDevice? get connectedDevice {
-    for (final d in devices) {
-      if (d.status == DeviceStatus.connected) return d;
-    }
-    return null;
   }
 
   Message? get playingMessage {
@@ -105,6 +123,15 @@ class AppState extends ChangeNotifier {
     final msg = Message(id: DateTime.now().millisecondsSinceEpoch, dir: MsgDir.sent, phraseIdx: idx, lang: langMine);
     messages = [...messages, msg];
     nextPhrase = idx + 1;
+    notifyListeners();
+    _addTimer(const Duration(milliseconds: 1100), receiveReply);
+  }
+
+  void sendTypedMessage(String text) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return;
+    final msg = Message(id: DateTime.now().millisecondsSinceEpoch, dir: MsgDir.sent, phraseIdx: 0, lang: langMine, customText: trimmed);
+    messages = [...messages, msg];
     notifyListeners();
     _addTimer(const Duration(milliseconds: 1100), receiveReply);
   }
@@ -166,35 +193,6 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void startScan() {
-    scanning = true;
-    notifyListeners();
-    _addTimer(const Duration(milliseconds: 1600), () {
-      scanning = false;
-      devices = [for (final d in devices) d.name == 'Umesh Phone' ? d.copyWith(status: DeviceStatus.available) : d];
-      notifyListeners();
-    });
-  }
-
-  void retryDevice(int id) {
-    devices = [for (final d in devices) d.id == id ? d.copyWith(status: DeviceStatus.connecting) : d];
-    notifyListeners();
-    _addTimer(const Duration(milliseconds: 1200), () {
-      devices = [for (final d in devices) d.id == id ? d.copyWith(status: DeviceStatus.available) : d];
-      notifyListeners();
-    });
-  }
-
-  void connectDevice(int id) {
-    devices = [
-      for (final d in devices)
-        d.id == id
-            ? d.copyWith(status: DeviceStatus.connected)
-            : (d.status == DeviceStatus.connected ? d.copyWith(status: DeviceStatus.available) : d),
-    ];
-    notifyListeners();
-  }
-
   void setVolume(double v) {
     volume = v;
     notifyListeners();
@@ -209,6 +207,14 @@ class AppState extends ChangeNotifier {
     showEmergency = true;
     emergencyProgress = 0;
     emergencyDone = false;
+
+    final msg = kEmergencyMessage[langMine] ?? kEmergencyMessage[LangCode.en]!;
+    alertHistory = [
+      EmergencyAlertRecord(id: DateTime.now().millisecondsSinceEpoch, dir: MsgDir.sent, native: msg.native, latin: msg.latin, timestamp: DateTime.now()),
+      ...alertHistory,
+    ];
+    unawaited(_saveAlertHistory());
+
     notifyListeners();
     const duration = Duration(milliseconds: 3000);
     final start = DateTime.now();

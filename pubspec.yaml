@@ -12,6 +12,8 @@ dependencies:
     sdk: flutter
   cupertino_icons: ^1.0.8
   provider: ^6.1.2
+  flutter_classic_bluetooth: ^1.1.0
+  shared_preferences: ^2.3.2
 
 dev_dependencies:
   flutter_test:
