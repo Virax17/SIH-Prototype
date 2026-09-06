@@ -50,6 +50,9 @@ app.*.map.json
 # Local tooling config
 .claude/
 
+# Claude Design handoff export (source design, not app code)
+/iTantra offline voice translator/
+
 # Stray build output copies
 *.apk
 *.aab

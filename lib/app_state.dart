@@ -2,250 +2,245 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'models.dart';
 
-enum Screen { home, pairing, settings, emergency }
+enum AppTab { home, devices, settings }
 
-enum Mode { idle, rec, incoming }
-
-enum Sheet { none, lang }
-
-enum AppThemeMode { dark, light }
-
-const _phrases = [
-  ['Send water to sector four', 'सेक्टर चार में पानी भेजो'],
-  ['Two people trapped near the bridge', 'पुल के पास दो लोग फंसे हैं'],
-  ['Road is clear, move the truck', 'रास्ता साफ है, ट्रक भेजो'],
+final List<Map<LangCode, Phrase>> kPhrases = [
+  {
+    LangCode.en: const Phrase(native: 'Send medical supplies now', latin: 'Send medical supplies now'),
+    LangCode.hi: const Phrase(native: 'अभी चिकित्सा सामग्री भेजें', latin: 'Abhi chikitsa samagri bhejein'),
+    LangCode.ta: const Phrase(native: 'இப்போது மருத்துவ பொருட்களை அனுப்பவும்', latin: 'Ippodhu maruthuva porutkalai anuppavum'),
+  },
+  {
+    LangCode.en: const Phrase(native: 'All clear, proceed to the shelter', latin: 'All clear, proceed to the shelter'),
+    LangCode.hi: const Phrase(native: 'सब ठीक है, आश्रय की ओर बढ़ें', latin: 'Sab theek hai, aashray ki or badhein'),
+    LangCode.ta: const Phrase(native: 'எல்லாம் சரி, தங்குமிடத்திற்கு செல்லுங்கள்', latin: 'Ellaam sari, thangumidathirku sellungal'),
+  },
+  {
+    LangCode.en: const Phrase(native: 'Water levels rising, move to higher ground', latin: 'Water levels rising, move to higher ground'),
+    LangCode.hi: const Phrase(native: 'पानी का स्तर बढ़ रहा है, ऊँची जगह जाएँ', latin: 'Paani ka star badh raha hai, oonchi jagah jaayein'),
+    LangCode.ta: const Phrase(native: 'நீர் மட்டம் உயருகிறது, உயரமான இடத்திற்கு செல்லுங்கள்', latin: 'Neer mattam uyarugirathu, uyaramana idathirku sellungal'),
+  },
+  {
+    LangCode.en: const Phrase(native: 'Team is on the way, hold position', latin: 'Team is on the way, hold position'),
+    LangCode.hi: const Phrase(native: 'टीम रास्ते में है, स्थिति बनाए रखें', latin: 'Team raaste mein hai, sthiti banaaye rakhein'),
+    LangCode.ta: const Phrase(native: 'குழு வழியில் உள்ளது, இடத்தில் இருங்கள்', latin: 'Kuzhu vazhiyil ullathu, idathil irungal'),
+  },
 ];
 
-const _replies = [
-  {'text': 'Water is on the way, ten minutes.', 'tag': 'RECEIVED · HI → EN'},
-  {'text': 'Team Bravo copies. Holding position.', 'tag': 'RECEIVED · TA → EN'},
-];
+final Map<LangCode, Phrase> kEmergencyMessage = {
+  LangCode.en: const Phrase(native: 'Flash flood warning — evacuate to high ground immediately', latin: 'Flash flood warning — evacuate to high ground immediately'),
+  LangCode.hi: const Phrase(native: 'बाढ़ की चेतावनी — तुरंत ऊँचाई की ओर जाएँ', latin: 'Baadh ki chetavani — turant oonchai ki or jaayein'),
+  LangCode.ta: const Phrase(native: 'திடீர் வெள்ள எச்சரிக்கை — உடனடியாக உயரமான இடத்திற்கு செல்லவும்', latin: 'Thidir vella echcharikkai — udanadiyaaga uyaramaana idathirku sellavum'),
+};
 
-const kPairedDeviceName = 'ITX-7742 · Bravo';
-
-/// Mirrors the state machine from the Claude Design prototype (iTantra.dc.html),
-/// with the same simulated STT/reply behavior. Real STT/TTS/Bluetooth wiring
-/// replaces the simulation methods in a later pass.
+/// Mirrors the state machine from the new Claude Design prototype
+/// (light theme, tab navigation), with the same simulated behavior.
+/// Real STT/TTS/Bluetooth wiring replaces the simulation methods later.
 class AppState extends ChangeNotifier {
-  Screen screen = Screen.home;
-  Mode mode = Mode.idle;
-  Sheet sheet = Sheet.none;
-  bool scanning = true;
-  String src = 'EN';
-  String dst = 'HI';
-  int vol = 8;
-  bool alertOn = true;
-  AppThemeMode themeMode = AppThemeMode.dark;
-  bool confirming = false;
-  int countdown = 3;
-  String partial = '';
-  int phraseIdx = 0;
-  int replyIdx = 0;
-  final List<DateTime> _tapTimes = [];
+  AppTab tab = AppTab.home;
+  bool recording = false;
 
   List<Message> messages = [
-    Message(id: 1, dir: MsgDir.recv, tag: 'RECEIVED · HI → EN', text: 'Are you at the relief camp?'),
-    Message(id: 2, dir: MsgDir.sent, tag: 'SENT · EN → HI', text: 'Yes, north gate. Bring blankets.'),
+    const Message(id: 1, dir: MsgDir.received, phraseIdx: 0, lang: LangCode.en, playing: false),
   ];
+  int nextPhrase = 1;
 
-  Timer? _partialTimer;
-  Timer? _holdTimer;
-  Timer? _replyTimer;
-  Timer? _countdownTimer;
+  LangCode langMine = LangCode.en;
+  LangCode langTheirs = LangCode.hi;
+  ScriptMode scriptMode = ScriptMode.both;
+  bool showLangSheet = false;
 
-  bool get isRec => mode == Mode.rec;
-  bool get isIncoming => mode == Mode.incoming;
-  bool get isIdle => mode == Mode.idle;
+  List<BtDevice> devices = const [
+    BtDevice(id: 1, name: "Vinay's Phone", status: DeviceStatus.connected),
+    BtDevice(id: 2, name: 'Pranay Phone', status: DeviceStatus.available),
+    BtDevice(id: 3, name: 'Umesh Phone', status: DeviceStatus.outOfRange),
+    BtDevice(id: 4, name: "Ved's iPhone", status: DeviceStatus.outOfRange),
+  ];
+  bool scanning = false;
 
-  void registerGlobalTap() {
-    final now = DateTime.now();
-    _tapTimes.removeWhere((t) => now.difference(t).inMilliseconds >= 600);
-    _tapTimes.add(now);
-    if (_tapTimes.length >= 3) {
-      _tapTimes.clear();
-      beginConfirm();
+  double volume = 80;
+  bool emergencyEnabled = true;
+  bool showEmergency = false;
+  double emergencyProgress = 0;
+  bool emergencyDone = false;
+
+  final List<Timer> _timers = [];
+
+  Timer _addTimer(Duration d, void Function() fn) {
+    final t = Timer(d, fn);
+    _timers.add(t);
+    return t;
+  }
+
+  BtDevice? get connectedDevice {
+    for (final d in devices) {
+      if (d.status == DeviceStatus.connected) return d;
     }
+    return null;
   }
 
-  void _cancelTimers() {
-    _partialTimer?.cancel();
-    _holdTimer?.cancel();
-    _replyTimer?.cancel();
-    _countdownTimer?.cancel();
+  Message? get playingMessage {
+    for (final m in messages) {
+      if (m.playing) return m;
+    }
+    return null;
   }
 
-  void setScene(Screen s, {Mode mode = Mode.idle, Sheet sheet = Sheet.none}) {
-    _cancelTimers();
-    screen = s;
-    this.mode = mode;
-    this.sheet = sheet;
-    partial = '';
-    confirming = false;
+  void setTab(AppTab t) {
+    tab = t;
+    showLangSheet = false;
     notifyListeners();
   }
 
-  void beginConfirm() {
-    _partialTimer?.cancel();
-    _holdTimer?.cancel();
-    mode = Mode.idle;
-    confirming = true;
-    countdown = 3;
+  void startRecording() {
+    if (showEmergency) return;
+    recording = true;
     notifyListeners();
-    _countdownTimer?.cancel();
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-      countdown -= 1;
-      if (countdown <= 0) {
+  }
+
+  void stopRecording() {
+    if (!recording) return;
+    recording = false;
+    final idx = nextPhrase;
+    final msg = Message(id: DateTime.now().millisecondsSinceEpoch, dir: MsgDir.sent, phraseIdx: idx, lang: langMine);
+    messages = [...messages, msg];
+    nextPhrase = idx + 1;
+    notifyListeners();
+    _addTimer(const Duration(milliseconds: 1100), receiveReply);
+  }
+
+  void receiveReply() {
+    final idx = nextPhrase;
+    final id = DateTime.now().millisecondsSinceEpoch + 1;
+    final msg = Message(id: id, dir: MsgDir.received, phraseIdx: idx, lang: langMine, playing: true);
+    messages = [...messages, msg];
+    nextPhrase = idx + 1;
+    notifyListeners();
+    _addTimer(const Duration(milliseconds: 2400), () => finishPlayback(id));
+  }
+
+  void finishPlayback(int id) {
+    messages = [for (final m in messages) m.id == id ? m.copyWith(playing: false) : m];
+    notifyListeners();
+  }
+
+  void replay(int id) {
+    messages = [for (final m in messages) m.id == id ? m.copyWith(playing: true) : m];
+    notifyListeners();
+    _addTimer(const Duration(milliseconds: 2000), () => finishPlayback(id));
+  }
+
+  void forceIncoming() => receiveReply();
+
+  void toggleScriptMode() {
+    const order = [ScriptMode.both, ScriptMode.native, ScriptMode.latin];
+    final i = order.indexOf(scriptMode);
+    scriptMode = order[(i + 1) % order.length];
+    notifyListeners();
+  }
+
+  void openLangSheet() {
+    showLangSheet = true;
+    notifyListeners();
+  }
+
+  void closeLangSheet() {
+    showLangSheet = false;
+    notifyListeners();
+  }
+
+  void selectMine(LangCode l) {
+    langMine = l;
+    notifyListeners();
+  }
+
+  void selectTheirs(LangCode l) {
+    langTheirs = l;
+    notifyListeners();
+  }
+
+  void swapLangs() {
+    final tmp = langMine;
+    langMine = langTheirs;
+    langTheirs = tmp;
+    notifyListeners();
+  }
+
+  void startScan() {
+    scanning = true;
+    notifyListeners();
+    _addTimer(const Duration(milliseconds: 1600), () {
+      scanning = false;
+      devices = [for (final d in devices) d.name == 'Umesh Phone' ? d.copyWith(status: DeviceStatus.available) : d];
+      notifyListeners();
+    });
+  }
+
+  void retryDevice(int id) {
+    devices = [for (final d in devices) d.id == id ? d.copyWith(status: DeviceStatus.connecting) : d];
+    notifyListeners();
+    _addTimer(const Duration(milliseconds: 1200), () {
+      devices = [for (final d in devices) d.id == id ? d.copyWith(status: DeviceStatus.available) : d];
+      notifyListeners();
+    });
+  }
+
+  void connectDevice(int id) {
+    devices = [
+      for (final d in devices)
+        d.id == id
+            ? d.copyWith(status: DeviceStatus.connected)
+            : (d.status == DeviceStatus.connected ? d.copyWith(status: DeviceStatus.available) : d),
+    ];
+    notifyListeners();
+  }
+
+  void setVolume(double v) {
+    volume = v;
+    notifyListeners();
+  }
+
+  void toggleEmergencyEnabled() {
+    emergencyEnabled = !emergencyEnabled;
+    notifyListeners();
+  }
+
+  void triggerEmergency() {
+    showEmergency = true;
+    emergencyProgress = 0;
+    emergencyDone = false;
+    notifyListeners();
+    const duration = Duration(milliseconds: 3000);
+    final start = DateTime.now();
+    final iv = Timer.periodic(const Duration(milliseconds: 100), (t) {
+      final elapsed = DateTime.now().difference(start).inMilliseconds;
+      final p = (elapsed / duration.inMilliseconds * 100).clamp(0, 100).toDouble();
+      if (p >= 100) {
         t.cancel();
-        confirming = false;
-        screen = Screen.emergency;
+        emergencyProgress = 100;
+        emergencyDone = true;
+      } else {
+        emergencyProgress = p;
       }
       notifyListeners();
     });
+    _timers.add(iv);
   }
 
-  void cancelConfirm() {
-    _countdownTimer?.cancel();
-    confirming = false;
+  void acknowledgeEmergency() {
+    showEmergency = false;
+    emergencyProgress = 0;
+    emergencyDone = false;
     notifyListeners();
   }
 
-  void startRec() {
-    if (mode == Mode.rec) return;
-    final words = _phrases[phraseIdx % _phrases.length][0].split(' ');
-    var i = 0;
-    mode = Mode.rec;
-    partial = '';
-    notifyListeners();
-    _partialTimer?.cancel();
-    _partialTimer = Timer.periodic(const Duration(milliseconds: 240), (t) {
-      i += 1;
-      partial = words.sublist(0, i.clamp(0, words.length)).join(' ');
-      notifyListeners();
-      if (i >= words.length) t.cancel();
-    });
-    _holdTimer?.cancel();
-    _holdTimer = Timer(const Duration(milliseconds: 3000), beginConfirm);
-  }
-
-  void stopRec() {
-    _holdTimer?.cancel();
-    if (mode != Mode.rec) return;
-    _partialTimer?.cancel();
-    final p = _phrases[phraseIdx % _phrases.length];
-    final said = partial.split(' ').length > 2 ? partial : p[0];
-    final message = Message(
-      id: DateTime.now().millisecondsSinceEpoch,
-      dir: MsgDir.sent,
-      tag: 'SENT · $src → $dst',
-      text: said,
-    );
-    messages = [...messages, message];
-    if (messages.length > 4) messages = messages.sublist(messages.length - 4);
-    mode = Mode.idle;
-    partial = '';
-    phraseIdx += 1;
-    notifyListeners();
-    _replyTimer?.cancel();
-    _replyTimer = Timer(const Duration(milliseconds: 1500), incoming);
-  }
-
-  void incoming() {
-    final r = _replies[replyIdx % _replies.length];
-    final message = Message(
-      id: DateTime.now().millisecondsSinceEpoch + 1,
-      dir: MsgDir.recv,
-      tag: r['tag']!,
-      text: r['text']!,
-    );
-    messages = [...messages, message];
-    if (messages.length > 4) messages = messages.sublist(messages.length - 4);
-    mode = Mode.incoming;
-    replyIdx += 1;
-    notifyListeners();
-    _replyTimer?.cancel();
-    _replyTimer = Timer(const Duration(milliseconds: 3800), () {
-      mode = Mode.idle;
-      notifyListeners();
-    });
-  }
-
-  void replay() {
-    mode = Mode.incoming;
-    notifyListeners();
-    _replyTimer?.cancel();
-    _replyTimer = Timer(const Duration(milliseconds: 3200), () {
-      mode = Mode.idle;
-      notifyListeners();
-    });
-  }
-
-  void toggleScan() {
-    scanning = !scanning;
-    notifyListeners();
-  }
-
-  void retryScan() {
-    scanning = true;
-    notifyListeners();
-  }
-
-  void connectTo() {
-    setScene(Screen.home);
-  }
-
-  void swapLang() {
-    final tmp = src;
-    src = dst;
-    dst = tmp;
-    notifyListeners();
-  }
-
-  void openLang() {
-    sheet = Sheet.lang;
-    notifyListeners();
-  }
-
-  void closeLang() {
-    sheet = Sheet.none;
-    notifyListeners();
-  }
-
-  void pickLang(String code) {
-    dst = code;
-    sheet = Sheet.none;
-    notifyListeners();
-  }
-
-  void toggleAlert() {
-    alertOn = !alertOn;
-    notifyListeners();
-  }
-
-  void toggleTheme() {
-    themeMode = themeMode == AppThemeMode.dark ? AppThemeMode.light : AppThemeMode.dark;
-    notifyListeners();
-  }
-
-  void setVol(int v) {
-    vol = v;
-    notifyListeners();
-  }
-
-  void goHome() => setScene(Screen.home);
-  void goPairing() => setScene(Screen.pairing);
-  void goSettings() => setScene(Screen.settings);
-  void ackEmergency() => setScene(Screen.home);
-
-  final devices = const [
-    DeviceInfo(name: kPairedDeviceName, status: 'connected · 4 bars', state: DeviceLinkState.connected, bars: 4),
-    DeviceInfo(name: 'ITX-3190 · Medical', status: 'available', state: DeviceLinkState.available, bars: 3),
-    DeviceInfo(name: 'ITX-0058 · Base camp', status: 'out of range — last seen 4 min', state: DeviceLinkState.failed, bars: 1),
-    DeviceInfo(name: 'Unknown device', status: 'available', state: DeviceLinkState.available, bars: 2),
-  ];
+  Phrase phraseFor(int phraseIdx, LangCode lang) => kPhrases[phraseIdx % kPhrases.length][lang]!;
 
   @override
   void dispose() {
-    _cancelTimers();
+    for (final t in _timers) {
+      t.cancel();
+    }
     super.dispose();
   }
 }
