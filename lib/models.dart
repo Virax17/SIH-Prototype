@@ -67,16 +67,4 @@ class Message {
       );
 }
 
-enum DeviceStatus { connected, available, outOfRange, connecting }
-
-class BtDevice {
-  final int id;
-  final String name;
-  final DeviceStatus status;
-
-  const BtDevice({required this.id, required this.name, required this.status});
-
-  BtDevice copyWith({DeviceStatus? status}) => BtDevice(id: id, name: name, status: status ?? this.status);
-}
-
 enum ScriptMode { both, native, latin }

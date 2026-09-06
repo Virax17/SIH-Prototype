@@ -50,14 +50,6 @@ class AppState extends ChangeNotifier {
   ScriptMode scriptMode = ScriptMode.both;
   bool showLangSheet = false;
 
-  List<BtDevice> devices = const [
-    BtDevice(id: 1, name: "Vinay's Phone", status: DeviceStatus.connected),
-    BtDevice(id: 2, name: 'Pranay Phone', status: DeviceStatus.available),
-    BtDevice(id: 3, name: 'Umesh Phone', status: DeviceStatus.outOfRange),
-    BtDevice(id: 4, name: "Ved's iPhone", status: DeviceStatus.outOfRange),
-  ];
-  bool scanning = false;
-
   double volume = 80;
   bool emergencyEnabled = true;
   bool showEmergency = false;
@@ -70,13 +62,6 @@ class AppState extends ChangeNotifier {
     final t = Timer(d, fn);
     _timers.add(t);
     return t;
-  }
-
-  BtDevice? get connectedDevice {
-    for (final d in devices) {
-      if (d.status == DeviceStatus.connected) return d;
-    }
-    return null;
   }
 
   Message? get playingMessage {
@@ -163,35 +148,6 @@ class AppState extends ChangeNotifier {
     final tmp = langMine;
     langMine = langTheirs;
     langTheirs = tmp;
-    notifyListeners();
-  }
-
-  void startScan() {
-    scanning = true;
-    notifyListeners();
-    _addTimer(const Duration(milliseconds: 1600), () {
-      scanning = false;
-      devices = [for (final d in devices) d.name == 'Umesh Phone' ? d.copyWith(status: DeviceStatus.available) : d];
-      notifyListeners();
-    });
-  }
-
-  void retryDevice(int id) {
-    devices = [for (final d in devices) d.id == id ? d.copyWith(status: DeviceStatus.connecting) : d];
-    notifyListeners();
-    _addTimer(const Duration(milliseconds: 1200), () {
-      devices = [for (final d in devices) d.id == id ? d.copyWith(status: DeviceStatus.available) : d];
-      notifyListeners();
-    });
-  }
-
-  void connectDevice(int id) {
-    devices = [
-      for (final d in devices)
-        d.id == id
-            ? d.copyWith(status: DeviceStatus.connected)
-            : (d.status == DeviceStatus.connected ? d.copyWith(status: DeviceStatus.available) : d),
-    ];
     notifyListeners();
   }
 

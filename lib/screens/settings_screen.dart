@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../app_state.dart';
 import '../models.dart';
+import '../services/bluetooth_manager.dart';
 import '../theme.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -11,7 +12,7 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
-    final connected = app.connectedDevice;
+    final connected = context.watch<BluetoothManager>().connectedDevice;
 
     return Container(
       color: AppColors.surface,
@@ -33,7 +34,7 @@ class SettingsScreen extends StatelessWidget {
                   iconBg: AppColors.accentSoft,
                   icon: const Icon(Icons.bluetooth, color: AppColors.accent, size: 18),
                   title: 'Paired device',
-                  subtitle: connected?.name ?? 'No device paired',
+                  subtitle: connected?.displayName ?? 'No device paired',
                   trailing: true,
                 ),
                 const SizedBox(height: 8),

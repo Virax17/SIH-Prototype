@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'app_state.dart';
+import 'services/bluetooth_manager.dart';
 import 'theme.dart';
 import 'screens/home_screen.dart';
 import 'screens/devices_screen.dart';
@@ -18,8 +19,11 @@ class ITantraApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => AppState(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AppState()),
+        ChangeNotifierProvider(create: (_) => BluetoothManager()..init()),
+      ],
       child: MaterialApp(
         title: 'iTantra',
         debugShowCheckedModeBanner: false,
