@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import 'app_state.dart';
 import 'services/bluetooth_manager.dart';
+import 'services/volume_ptt_service.dart';
 import 'theme.dart';
 import 'screens/home_screen.dart';
 import 'screens/devices_screen.dart';
@@ -34,8 +35,25 @@ class ITantraApp extends StatelessWidget {
   }
 }
 
-class RootShell extends StatelessWidget {
+class RootShell extends StatefulWidget {
   const RootShell({super.key});
+
+  @override
+  State<RootShell> createState() => _RootShellState();
+}
+
+class _RootShellState extends State<RootShell> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final app = context.read<AppState>();
+      VolumePttService.init(
+        onComboPressed: app.startRecording,
+        onComboReleased: app.stopRecording,
+      );
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
