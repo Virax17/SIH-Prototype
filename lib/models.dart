@@ -50,12 +50,18 @@ class Message {
   final LangCode lang;
   final bool playing;
 
+  /// Set when this message was typed by hand rather than spoken (or
+  /// simulated from [kPhrases]) — shown verbatim instead of looking up a
+  /// canned phrase by [phraseIdx].
+  final String? customText;
+
   const Message({
     required this.id,
     required this.dir,
     required this.phraseIdx,
     required this.lang,
     this.playing = false,
+    this.customText,
   });
 
   Message copyWith({bool? playing}) => Message(
@@ -64,6 +70,7 @@ class Message {
         phraseIdx: phraseIdx,
         lang: lang,
         playing: playing ?? this.playing,
+        customText: customText,
       );
 }
 
