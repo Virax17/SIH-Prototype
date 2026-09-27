@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../app_state.dart';
 import '../models.dart';
 import '../services/bluetooth_manager.dart';
+import '../services/stt_service.dart';
 import '../theme.dart';
 import '../widgets/wave_bars.dart';
 import 'alert_history_screen.dart';
@@ -15,6 +16,7 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
     final bt = context.watch<BluetoothManager>();
+    final stt = context.watch<SttService>();
     final connected = bt.connectedDevice;
     final playing = app.playingMessage;
 
@@ -125,6 +127,58 @@ class HomeScreen extends StatelessWidget {
               ],
             ),
           ),
+          if (stt.loading)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(color: AppColors.accentSoft, borderRadius: BorderRadius.circular(14)),
+                child: Row(
+                  children: [
+                    const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Preparing offline speech engine…',
+                        style: TextStyle(fontFamily: appFont, fontSize: 12.5, fontWeight: FontWeight.w500, color: AppColors.textPrimary),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else if (stt.switchingLanguage)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(color: AppColors.accentSoft, borderRadius: BorderRadius.circular(14)),
+                child: Row(
+                  children: [
+                    const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Switching speech language…',
+                        style: TextStyle(fontFamily: appFont, fontSize: 12.5, fontWeight: FontWeight.w500, color: AppColors.textPrimary),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else if (stt.error != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(color: AppColors.dangerSoft, borderRadius: BorderRadius.circular(14)),
+                child: Text(
+                  'Speech engine failed to load: ${stt.error}',
+                  style: const TextStyle(fontFamily: appFont, fontSize: 12, color: AppColors.danger),
+                ),
+              ),
+            ),
           if (playing != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
@@ -168,7 +222,11 @@ class HomeScreen extends StatelessWidget {
             child: Column(
               children: [
                 Text(
-                  app.recording ? 'Recording — release to send' : 'Hold to talk',
+                  app.recording
+                      ? 'Recording — release to send'
+                      : app.transcribing
+                          ? 'Transcribing…'
+                          : 'Hold to talk',
                   style: TextStyle(fontFamily: appFont, fontSize: 12.5, fontWeight: FontWeight.w500, color: AppColors.textSecondary(0.5)),
                 ),
                 const SizedBox(height: 8),
@@ -481,9 +539,9 @@ class _PttButtonState extends State<_PttButton> with SingleTickerProviderStateMi
             _PulseRing(controller: _pulse, delay: 0.36),
           ],
           GestureDetector(
-            onTapDown: (_) => app.startRecording(),
-            onTapUp: (_) => app.stopRecording(),
-            onTapCancel: () => app.stopRecording(),
+            onTapDown: app.transcribing ? null : (_) => app.startRecording(),
+            onTapUp: app.transcribing ? null : (_) => app.stopRecording(),
+            onTapCancel: app.transcribing ? null : () => app.stopRecording(),
             child: AnimatedScale(
               scale: app.recording ? 1.06 : 1.0,
               duration: const Duration(milliseconds: 120),
@@ -495,7 +553,12 @@ class _PttButtonState extends State<_PttButton> with SingleTickerProviderStateMi
                   color: app.recording ? AppColors.accentDark : AppColors.accent,
                   boxShadow: [BoxShadow(color: AppColors.accent.withValues(alpha: 0.35), blurRadius: 20, offset: const Offset(0, 8))],
                 ),
-                child: const Icon(Icons.mic, color: Colors.white, size: 34),
+                child: app.transcribing
+                    ? const Padding(
+                        padding: EdgeInsets.all(28),
+                        child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white),
+                      )
+                    : const Icon(Icons.mic, color: Colors.white, size: 34),
               ),
             ),
           ),

@@ -14,6 +14,9 @@ dependencies:
   provider: ^6.1.2
   flutter_classic_bluetooth: ^1.1.0
   shared_preferences: ^2.3.2
+  sherpa_onnx: ^1.13.8
+  record: ^7.1.1
+  path_provider: ^2.1.5
 
 dev_dependencies:
   flutter_test:
@@ -25,6 +28,7 @@ flutter:
 
   assets:
     - assets/fonts/
+    - assets/models/whisper-tiny/
 
   fonts:
     - family: Barlow

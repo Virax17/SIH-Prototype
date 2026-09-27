@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'models.dart';
+import 'services/stt_service.dart';
 
 const _alertHistoryKey = 'itantra.alerts.history';
 
@@ -43,8 +44,14 @@ final Map<LangCode, Phrase> kEmergencyMessage = {
 /// (light theme, tab navigation), with the same simulated behavior.
 /// Real STT/TTS/Bluetooth wiring replaces the simulation methods later.
 class AppState extends ChangeNotifier {
+  final SttService _stt;
+  AppState(this._stt) {
+    _loadAlertHistory();
+  }
+
   AppTab tab = AppTab.home;
   bool recording = false;
+  bool transcribing = false;
 
   List<Message> messages = [
     const Message(id: 1, dir: MsgDir.received, phraseIdx: 0, lang: LangCode.en, playing: false),
@@ -65,10 +72,6 @@ class AppState extends ChangeNotifier {
   List<EmergencyAlertRecord> alertHistory = [];
 
   final List<Timer> _timers = [];
-
-  AppState() {
-    _loadAlertHistory();
-  }
 
   Future<void> _loadAlertHistory() async {
     try {
@@ -110,19 +113,34 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void startRecording() {
-    if (showEmergency) return;
+  Future<void> startRecording() async {
+    if (showEmergency || recording || transcribing) return;
+    if (!_stt.ready) return;
     recording = true;
     notifyListeners();
+    final started = await _stt.startRecording(language: langMine.name);
+    if (!started) {
+      // Permission denied or model not ready — bail out of the recording UI.
+      recording = false;
+      notifyListeners();
+    }
   }
 
-  void stopRecording() {
+  Future<void> stopRecording() async {
     if (!recording) return;
     recording = false;
-    final idx = nextPhrase;
-    final msg = Message(id: DateTime.now().millisecondsSinceEpoch, dir: MsgDir.sent, phraseIdx: idx, lang: langMine);
+    transcribing = true;
+    notifyListeners();
+
+    final text = await _stt.stopRecording();
+
+    transcribing = false;
+    if (text == null || text.isEmpty) {
+      notifyListeners();
+      return;
+    }
+    final msg = Message(id: DateTime.now().millisecondsSinceEpoch, dir: MsgDir.sent, phraseIdx: 0, lang: langMine, customText: text);
     messages = [...messages, msg];
-    nextPhrase = idx + 1;
     notifyListeners();
     _addTimer(const Duration(milliseconds: 1100), receiveReply);
   }
@@ -179,6 +197,7 @@ class AppState extends ChangeNotifier {
   void selectMine(LangCode l) {
     langMine = l;
     notifyListeners();
+    unawaited(_stt.prepareLanguage(l.name));
   }
 
   void selectTheirs(LangCode l) {
@@ -191,6 +210,7 @@ class AppState extends ChangeNotifier {
     langMine = langTheirs;
     langTheirs = tmp;
     notifyListeners();
+    unawaited(_stt.prepareLanguage(langMine.name));
   }
 
   void setVolume(double v) {

@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa_onnx;
 
 import 'app_state.dart';
 import 'services/bluetooth_manager.dart';
+import 'services/stt_service.dart';
 import 'services/volume_ptt_service.dart';
 import 'theme.dart';
 import 'screens/home_screen.dart';
@@ -12,17 +16,22 @@ import 'widgets/emergency_screen.dart';
 import 'widgets/language_sheet.dart';
 
 void main() {
-  runApp(const ITantraApp());
+  sherpa_onnx.initBindings();
+  final stt = SttService();
+  unawaited(stt.init());
+  runApp(ITantraApp(stt: stt));
 }
 
 class ITantraApp extends StatelessWidget {
-  const ITantraApp({super.key});
+  final SttService stt;
+  const ITantraApp({super.key, required this.stt});
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AppState()),
+        ChangeNotifierProvider.value(value: stt),
+        ChangeNotifierProvider(create: (_) => AppState(stt)),
         ChangeNotifierProvider(create: (_) => BluetoothManager()..init()),
       ],
       child: MaterialApp(
