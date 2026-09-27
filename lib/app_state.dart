@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'models.dart';
 import 'services/stt_service.dart';
+import 'services/tts_service.dart';
 
 const _alertHistoryKey = 'itantra.alerts.history';
 
@@ -45,7 +46,8 @@ final Map<LangCode, Phrase> kEmergencyMessage = {
 /// Real STT/TTS/Bluetooth wiring replaces the simulation methods later.
 class AppState extends ChangeNotifier {
   final SttService _stt;
-  AppState(this._stt) {
+  final TtsService _tts;
+  AppState(this._stt, this._tts) {
     _loadAlertHistory();
   }
 
@@ -158,10 +160,10 @@ class AppState extends ChangeNotifier {
     final idx = nextPhrase;
     final id = DateTime.now().millisecondsSinceEpoch + 1;
     final msg = Message(id: id, dir: MsgDir.received, phraseIdx: idx, lang: langMine, playing: true);
-    messages = [...messages, msg];
+    messages = [for (final m in messages) m.copyWith(playing: false)] + [msg];
     nextPhrase = idx + 1;
     notifyListeners();
-    _addTimer(const Duration(milliseconds: 2400), () => finishPlayback(id));
+    unawaited(_speakThenFinish(msg));
   }
 
   void finishPlayback(int id) {
@@ -170,9 +172,24 @@ class AppState extends ChangeNotifier {
   }
 
   void replay(int id) {
-    messages = [for (final m in messages) m.id == id ? m.copyWith(playing: true) : m];
+    Message? target;
+    for (final m in messages) {
+      if (m.id == id) target = m;
+    }
+    if (target == null) return;
+    messages = [for (final m in messages) m.copyWith(playing: m.id == id)];
     notifyListeners();
-    _addTimer(const Duration(milliseconds: 2000), () => finishPlayback(id));
+    unawaited(_speakThenFinish(target));
+  }
+
+  /// The exact text a message would say aloud — always the native-script
+  /// form, regardless of the transcript's display [scriptMode] (that toggle
+  /// only affects what's shown as text, not what's spoken).
+  String textFor(Message m) => m.customText ?? phraseFor(m.phraseIdx, m.lang).native;
+
+  Future<void> _speakThenFinish(Message m) async {
+    await _tts.speak(text: textFor(m), language: m.lang.name);
+    finishPlayback(m.id);
   }
 
   void forceIncoming() => receiveReply();
@@ -198,6 +215,7 @@ class AppState extends ChangeNotifier {
     langMine = l;
     notifyListeners();
     unawaited(_stt.prepareLanguage(l.name));
+    unawaited(_tts.prepareLanguage(l.name));
   }
 
   void selectTheirs(LangCode l) {
@@ -211,6 +229,7 @@ class AppState extends ChangeNotifier {
     langTheirs = tmp;
     notifyListeners();
     unawaited(_stt.prepareLanguage(langMine.name));
+    unawaited(_tts.prepareLanguage(langMine.name));
   }
 
   void setVolume(double v) {

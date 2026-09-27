@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -9,12 +10,20 @@ import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa_onnx;
 
 const _assetDir = 'assets/models/whisper-tiny';
 const _modelFiles = ['tiny-encoder.int8.onnx', 'tiny-decoder.int8.onnx', 'tiny-tokens.txt'];
+const _sampleRate = 16000;
 
 /// Real, on-device speech-to-text using a Whisper-tiny (multilingual) model
 /// via sherpa-onnx. Loads the model once at startup (copying it out of the
 /// Flutter asset bundle to a real file, since the native recognizer needs a
-/// filesystem path) and records/transcribes complete utterances — a good
-/// match for push-to-talk, since Whisper is non-streaming by design.
+/// filesystem path).
+///
+/// Whisper itself is non-streaming — there's no incremental decode API — so
+/// "live" partial text is approximated by re-running the same recognizer on
+/// the growing audio buffer every [_partialInterval] while the user holds
+/// the button, rather than waiting for a genuinely different streaming
+/// model. It's redundant compute (each pass re-reads from the start of the
+/// utterance) but is simple, needs no extra model, and reads as "live" to
+/// the user.
 ///
 /// Only one recognizer instance is kept resident at a time — Whisper's
 /// `language` hint is fixed at construction (sherpa-onnx does not yet support
@@ -24,10 +33,14 @@ const _modelFiles = ['tiny-encoder.int8.onnx', 'tiny-decoder.int8.onnx', 'tiny-t
 /// recording would otherwise eat the start of the user's speech while the UI
 /// already shows "Recording".
 class SttService extends ChangeNotifier {
+  static const _partialInterval = Duration(milliseconds: 1200);
+
   bool loading = true;
   bool ready = false;
   bool switchingLanguage = false;
   String? error;
+
+  String partialText = '';
 
   String? _modelDir;
   sherpa_onnx.OfflineRecognizer? _recognizer;
@@ -35,7 +48,10 @@ class SttService extends ChangeNotifier {
   Future<void>? _pendingBuild;
 
   final AudioRecorder _recorder = AudioRecorder();
-  String? _recordingPath;
+  StreamSubscription<Uint8List>? _audioSub;
+  Timer? _partialTimer;
+  final BytesBuilder _pcmBuffer = BytesBuilder(copy: false);
+  bool _partialBusy = false;
 
   Future<void> init({String initialLanguage = 'en'}) async {
     try {
@@ -129,12 +145,15 @@ class SttService extends ChangeNotifier {
       // against the wrong-language model.
       await prepareLanguage(language);
       if (_recognizer == null) return false;
-      final tmp = await getTemporaryDirectory();
-      _recordingPath = '${tmp.path}/itantra_ptt.wav';
-      await _recorder.start(
-        const RecordConfig(encoder: AudioEncoder.wav, sampleRate: 16000, numChannels: 1),
-        path: _recordingPath!,
+
+      partialText = '';
+      notifyListeners();
+
+      final stream = await _recorder.startStream(
+        const RecordConfig(encoder: AudioEncoder.pcm16bits, sampleRate: _sampleRate, numChannels: 1),
       );
+      _audioSub = stream.listen((chunk) => _pcmBuffer.add(chunk));
+      _partialTimer = Timer.periodic(_partialInterval, (_) => _runPartial());
       return true;
     } catch (e) {
       error = '$e';
@@ -143,19 +162,59 @@ class SttService extends ChangeNotifier {
     }
   }
 
+  void _runPartial() {
+    final recognizer = _recognizer;
+    if (recognizer == null || _partialBusy || _pcmBuffer.length < _sampleRate ~/ 2) return;
+    _partialBusy = true;
+    try {
+      final samples = _floatSamplesFrom(_pcmBuffer.toBytes());
+      final stream = recognizer.createStream();
+      stream.acceptWaveform(samples: samples, sampleRate: _sampleRate);
+      recognizer.decode(stream);
+      final text = recognizer.getResult(stream).text.trim();
+      stream.free();
+      if (text.isNotEmpty && text != partialText) {
+        partialText = text;
+        notifyListeners();
+      }
+    } catch (_) {
+      // A partial pass failing isn't fatal — just skip this tick.
+    } finally {
+      _partialBusy = false;
+    }
+  }
+
+  Float32List _floatSamplesFrom(Uint8List pcm16) {
+    final byteData = ByteData.sublistView(pcm16);
+    final n = pcm16.length ~/ 2;
+    final out = Float32List(n);
+    for (var i = 0; i < n; i++) {
+      out[i] = byteData.getInt16(i * 2, Endian.little) / 32768.0;
+    }
+    return out;
+  }
+
   /// Stops recording and runs the recognizer on the captured audio.
   /// Returns the transcribed text, or null if nothing usable was captured.
   Future<String?> stopRecording() async {
-    final path = await _recorder.stop();
+    _partialTimer?.cancel();
+    _partialTimer = null;
+    await _audioSub?.cancel();
+    _audioSub = null;
+    await _recorder.stop();
+
     final recognizer = _recognizer;
-    if (path == null || recognizer == null) return null;
+    final bytes = _pcmBuffer.toBytes();
+    _pcmBuffer.clear();
+    partialText = '';
+    notifyListeners();
+
+    if (recognizer == null || bytes.length < _sampleRate ~/ 4) return null;
 
     try {
-      final wave = sherpa_onnx.readWave(path);
-      if (wave.samples.isEmpty) return null;
-
+      final samples = _floatSamplesFrom(bytes);
       final stream = recognizer.createStream();
-      stream.acceptWaveform(samples: wave.samples, sampleRate: wave.sampleRate);
+      stream.acceptWaveform(samples: samples, sampleRate: _sampleRate);
       recognizer.decode(stream);
       final result = recognizer.getResult(stream);
       stream.free();
@@ -171,6 +230,8 @@ class SttService extends ChangeNotifier {
 
   @override
   void dispose() {
+    _partialTimer?.cancel();
+    _audioSub?.cancel();
     _recognizer?.free();
     _recorder.dispose();
     super.dispose();

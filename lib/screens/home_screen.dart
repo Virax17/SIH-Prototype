@@ -5,6 +5,7 @@ import '../app_state.dart';
 import '../models.dart';
 import '../services/bluetooth_manager.dart';
 import '../services/stt_service.dart';
+import '../services/tts_service.dart';
 import '../theme.dart';
 import '../widgets/wave_bars.dart';
 import 'alert_history_screen.dart';
@@ -17,6 +18,7 @@ class HomeScreen extends StatelessWidget {
     final app = context.watch<AppState>();
     final bt = context.watch<BluetoothManager>();
     final stt = context.watch<SttService>();
+    final tts = context.watch<TtsService>();
     final connected = bt.connectedDevice;
     final playing = app.playingMessage;
 
@@ -127,7 +129,7 @@ class HomeScreen extends StatelessWidget {
               ],
             ),
           ),
-          if (stt.loading)
+          if (stt.loading || tts.loading)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
               child: Container(
@@ -147,7 +149,7 @@ class HomeScreen extends StatelessWidget {
                 ),
               ),
             )
-          else if (stt.switchingLanguage)
+          else if (stt.switchingLanguage || tts.switchingVoice)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
               child: Container(
@@ -167,14 +169,14 @@ class HomeScreen extends StatelessWidget {
                 ),
               ),
             )
-          else if (stt.error != null)
+          else if (stt.error != null || tts.error != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(color: AppColors.dangerSoft, borderRadius: BorderRadius.circular(14)),
                 child: Text(
-                  'Speech engine failed to load: ${stt.error}',
+                  stt.error != null ? 'Speech-to-text failed to load: ${stt.error}' : 'Voice failed to load: ${tts.error}',
                   style: const TextStyle(fontFamily: appFont, fontSize: 12, color: AppColors.danger),
                 ),
               ),
@@ -219,25 +221,7 @@ class HomeScreen extends StatelessWidget {
           Container(
             padding: const EdgeInsets.fromLTRB(16, 18, 16, 14),
             decoration: BoxDecoration(border: Border(top: BorderSide(color: AppColors.border(0.06)))),
-            child: Column(
-              children: [
-                Text(
-                  app.recording
-                      ? 'Recording — release to send'
-                      : app.transcribing
-                          ? 'Transcribing…'
-                          : 'Hold to talk',
-                  style: TextStyle(fontFamily: appFont, fontSize: 12.5, fontWeight: FontWeight.w500, color: AppColors.textSecondary(0.5)),
-                ),
-                const SizedBox(height: 8),
-                _PttButton(app: app),
-                const SizedBox(height: 8),
-                SizedBox(
-                  height: 16,
-                  child: app.recording ? const WaveBars(color: AppColors.accent, barCount: 5, barWidth: 3, maxHeight: 16) : null,
-                ),
-              ],
-            ),
+            child: _PttArea(app: app, stt: stt),
           ),
         ],
       ),
@@ -502,16 +486,22 @@ class _TypedMessageBarState extends State<_TypedMessageBar> {
   }
 }
 
-class _PttButton extends StatefulWidget {
+class _PttArea extends StatefulWidget {
   final AppState app;
-  const _PttButton({required this.app});
+  final SttService stt;
+  const _PttArea({required this.app, required this.stt});
 
   @override
-  State<_PttButton> createState() => _PttButtonState();
+  State<_PttArea> createState() => _PttAreaState();
 }
 
-class _PttButtonState extends State<_PttButton> with SingleTickerProviderStateMixin {
+class _PttAreaState extends State<_PttArea> with SingleTickerProviderStateMixin {
+  static const _lockThreshold = 72.0;
+
   late final AnimationController _pulse;
+  bool _locked = false;
+  double? _dragStartY;
+  double _dragProgress = 0;
 
   @override
   void initState() {
@@ -525,45 +515,146 @@ class _PttButtonState extends State<_PttButton> with SingleTickerProviderStateMi
     super.dispose();
   }
 
+  void _onPointerDown(PointerDownEvent e) {
+    final app = widget.app;
+    if (app.transcribing) return;
+    if (app.recording && _locked) {
+      // A fresh tap while locked-and-recording means "stop and send".
+      setState(() => _locked = false);
+      app.stopRecording();
+      return;
+    }
+    _dragStartY = e.position.dy;
+    setState(() => _dragProgress = 0);
+    app.startRecording();
+  }
+
+  void _onPointerMove(PointerMoveEvent e) {
+    if (_dragStartY == null || _locked) return;
+    final delta = _dragStartY! - e.position.dy;
+    final progress = (delta / _lockThreshold).clamp(0.0, 1.0);
+    if (delta >= _lockThreshold) {
+      setState(() {
+        _locked = true;
+        _dragProgress = 0;
+      });
+    } else if (progress != _dragProgress) {
+      setState(() => _dragProgress = progress);
+    }
+  }
+
+  void _onPointerUp(PointerUpEvent e) {
+    _dragStartY = null;
+    if (_locked) {
+      setState(() => _dragProgress = 0);
+      return;
+    }
+    setState(() => _dragProgress = 0);
+    widget.app.stopRecording();
+  }
+
+  void _onPointerCancel(PointerCancelEvent e) {
+    _dragStartY = null;
+    if (!_locked) widget.app.stopRecording();
+    setState(() => _dragProgress = 0);
+  }
+
   @override
   Widget build(BuildContext context) {
     final app = widget.app;
-    return SizedBox(
-      width: 104,
-      height: 104,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          if (app.recording) ...[
-            _PulseRing(controller: _pulse, delay: 0),
-            _PulseRing(controller: _pulse, delay: 0.36),
-          ],
-          GestureDetector(
-            onTapDown: app.transcribing ? null : (_) => app.startRecording(),
-            onTapUp: app.transcribing ? null : (_) => app.stopRecording(),
-            onTapCancel: app.transcribing ? null : () => app.stopRecording(),
-            child: AnimatedScale(
-              scale: app.recording ? 1.06 : 1.0,
-              duration: const Duration(milliseconds: 120),
-              child: Container(
-                width: 96,
-                height: 96,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: app.recording ? AppColors.accentDark : AppColors.accent,
-                  boxShadow: [BoxShadow(color: AppColors.accent.withValues(alpha: 0.35), blurRadius: 20, offset: const Offset(0, 8))],
-                ),
-                child: app.transcribing
-                    ? const Padding(
-                        padding: EdgeInsets.all(28),
-                        child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white),
-                      )
-                    : const Icon(Icons.mic, color: Colors.white, size: 34),
-              ),
+    final stt = widget.stt;
+    final showingPartial = app.recording && stt.partialText.isNotEmpty;
+
+    final String label;
+    if (app.transcribing) {
+      label = 'Transcribing…';
+    } else if (_locked && app.recording) {
+      label = 'Locked — tap the mic to send';
+    } else if (showingPartial) {
+      label = stt.partialText;
+    } else if (app.recording) {
+      label = 'Recording — release to send, slide up to lock';
+    } else {
+      label = 'Hold to talk';
+    }
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontFamily: appFont,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w500,
+              color: showingPartial ? AppColors.textPrimary : AppColors.textSecondary(0.5),
             ),
           ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: 104,
+          height: 144,
+          child: Stack(
+            alignment: Alignment.bottomCenter,
+            children: [
+              Positioned(
+                bottom: 108 + (_locked ? 24 : _dragProgress * 36),
+                child: Opacity(
+                  opacity: _locked ? 1.0 : (0.3 + _dragProgress * 0.7),
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: _locked ? AppColors.accent : AppColors.card,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: AppColors.accent.withValues(alpha: 0.4)),
+                    ),
+                    child: Icon(_locked ? Icons.lock : Icons.keyboard_arrow_up, size: 18, color: _locked ? Colors.white : AppColors.accent),
+                  ),
+                ),
+              ),
+              if (app.recording) ...[
+                _PulseRing(controller: _pulse, delay: 0),
+                _PulseRing(controller: _pulse, delay: 0.36),
+              ],
+              Listener(
+                onPointerDown: _onPointerDown,
+                onPointerMove: _onPointerMove,
+                onPointerUp: _onPointerUp,
+                onPointerCancel: _onPointerCancel,
+                child: AnimatedScale(
+                  scale: app.recording ? 1.06 : 1.0,
+                  duration: const Duration(milliseconds: 120),
+                  child: Container(
+                    width: 96,
+                    height: 96,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: app.recording ? AppColors.accentDark : AppColors.accent,
+                      boxShadow: [BoxShadow(color: AppColors.accent.withValues(alpha: 0.35), blurRadius: 20, offset: const Offset(0, 8))],
+                    ),
+                    child: app.transcribing
+                        ? const Padding(
+                            padding: EdgeInsets.all(28),
+                            child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white),
+                          )
+                        : Icon(_locked && app.recording ? Icons.send : Icons.mic, color: Colors.white, size: 34),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(
+          height: 16,
+          child: app.recording ? const WaveBars(color: AppColors.accent, barCount: 5, barWidth: 3, maxHeight: 16) : null,
+        ),
+      ],
     );
   }
 }
