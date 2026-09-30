@@ -6,6 +6,7 @@ import '../models.dart';
 import '../services/bluetooth_manager.dart';
 import '../theme.dart';
 import 'alert_history_screen.dart';
+import 'devices_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -30,20 +31,21 @@ class SettingsScreen extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
               children: [
+                const _SectionHeader('DEVICE'),
                 _SettingsRow(
-                  onTap: () => app.setTab(AppTab.devices),
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const DevicesScreen())),
                   iconBg: AppColors.accentSoft,
                   icon: const Icon(Icons.bluetooth, color: AppColors.accent, size: 18),
                   title: 'Paired device',
                   subtitle: connected?.displayName ?? 'No device paired',
                   trailing: true,
                 ),
-                const SizedBox(height: 8),
+                const _SectionHeader('COMMUNICATION'),
                 _SettingsRow(
                   onTap: app.openLangSheet,
                   iconBg: AppColors.accentSoft,
                   icon: const Icon(Icons.swap_horiz, color: AppColors.accent, size: 18),
-                  title: 'Default language pair',
+                  title: 'Language pair',
                   subtitle: '${app.langMine.latinName} → ${app.langTheirs.latinName}',
                   trailing: true,
                 ),
@@ -86,7 +88,7 @@ class SettingsScreen extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(height: 8),
+                const _SectionHeader('EMERGENCY'),
                 _ToggleRow(
                   onTap: app.toggleEmergencyEnabled,
                   iconBg: AppColors.dangerSoft,
@@ -96,13 +98,13 @@ class SettingsScreen extends StatelessWidget {
                   value: app.emergencyEnabled,
                 ),
                 const SizedBox(height: 8),
-                _SettingsRow(
-                  onTap: app.toggleScriptMode,
-                  iconBg: AppColors.neutralSoft,
-                  icon: Text('Aa', style: TextStyle(fontFamily: appFont, fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textSecondary(0.55))),
-                  title: 'Transcript text',
-                  subtitle: 'Voice is primary — text is shown as: ${_scriptModeLabel(app.scriptMode)}',
-                  trailing: true,
+                _ToggleRow(
+                  onTap: app.toggleEmergencyMode,
+                  iconBg: AppColors.dangerSoft,
+                  icon: const Icon(Icons.shield_outlined, color: AppColors.danger, size: 17),
+                  title: 'Emergency Mode',
+                  subtitle: app.emergencyMode ? 'On — animations reduced to save battery' : 'Prioritize communication when you need help',
+                  value: app.emergencyMode,
                 ),
                 const SizedBox(height: 8),
                 _SettingsRow(
@@ -113,6 +115,7 @@ class SettingsScreen extends StatelessWidget {
                   subtitle: app.alertHistory.isEmpty ? 'No alerts logged yet' : '${app.alertHistory.length} alert${app.alertHistory.length == 1 ? '' : 's'} logged · kept permanently',
                   trailing: true,
                 ),
+                const _SectionHeader('ABOUT'),
                 const Padding(
                   padding: EdgeInsets.fromLTRB(14, 16, 14, 4),
                   child: Column(
@@ -131,15 +134,21 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  String _scriptModeLabel(ScriptMode m) {
-    switch (m) {
-      case ScriptMode.both:
-        return 'Both';
-      case ScriptMode.native:
-        return 'Native script';
-      case ScriptMode.latin:
-        return 'Latin script';
-    }
+}
+
+class _SectionHeader extends StatelessWidget {
+  final String label;
+  const _SectionHeader(this.label);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 18, 4, 8),
+      child: Text(
+        label,
+        style: TextStyle(fontFamily: appFont, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.6, color: AppColors.textSecondary(0.4)),
+      ),
+    );
   }
 }
 

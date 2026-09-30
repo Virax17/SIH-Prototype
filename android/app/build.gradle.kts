@@ -27,6 +27,13 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // Vosk and ONNX Runtime ship native .so libraries per ABI; restrict to
+        // the two ABIs that cover virtually all real Android phones so the
+        // ~300MB of bundled model assets isn't multiplied across unused ABIs.
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+        }
     }
 
     buildTypes {

@@ -43,38 +43,44 @@ class Phrase {
 
 enum MsgDir { sent, received }
 
+/// Real delivery state of a [MsgDir.sent] message, driven by the Bluetooth
+/// send + ack round trip (see `BluetoothManager.sendText`/`messageAcked`) —
+/// not a fixed animation.
+enum DeliveryStatus { sending, delivered }
+
 class Message {
   final int id;
   final MsgDir dir;
-  final int phraseIdx;
   final LangCode lang;
   final bool playing;
 
-  /// Set when this message was typed by hand rather than spoken (or
-  /// simulated from [kPhrases]) — shown verbatim instead of looking up a
-  /// canned phrase by [phraseIdx].
-  final String? customText;
+  /// The real recognized/translated (or typed) text of this message, in
+  /// [lang]. This is what's displayed and what gets spoken by TTS on replay.
+  final String text;
+
+  /// Set for [MsgDir.sent] messages once they've actually been written to
+  /// the connection; null for received messages (delivery is meaningless
+  /// from the receiving side).
+  final DeliveryStatus? delivery;
 
   const Message({
     required this.id,
     required this.dir,
-    required this.phraseIdx,
     required this.lang,
+    required this.text,
     this.playing = false,
-    this.customText,
+    this.delivery,
   });
 
-  Message copyWith({bool? playing}) => Message(
+  Message copyWith({bool? playing, DeliveryStatus? delivery}) => Message(
         id: id,
         dir: dir,
-        phraseIdx: phraseIdx,
         lang: lang,
+        text: text,
         playing: playing ?? this.playing,
-        customText: customText,
+        delivery: delivery ?? this.delivery,
       );
 }
-
-enum ScriptMode { both, native, latin }
 
 /// A permanent local record of a government emergency broadcast that was
 /// sent or received. Never auto-deleted — the log is the point.

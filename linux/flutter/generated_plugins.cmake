@@ -4,9 +4,12 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   flutter_classic_bluetooth
+  vosk_flutter
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
+  jni
+  onnxruntime
 )
 
 set(PLUGIN_BUNDLED_LIBRARIES)

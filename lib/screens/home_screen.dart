@@ -2,12 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../app_state.dart';
-import '../models.dart';
 import '../services/bluetooth_manager.dart';
 import '../theme.dart';
-import '../widgets/wave_bars.dart';
-import 'alert_history_screen.dart';
+import 'conversation_screen.dart';
+import 'devices_screen.dart';
+import 'network_screen.dart';
 
+/// Matches the reference design's "Talk home": mesh status card, a "Nearby"
+/// device list (real Bluetooth history/paired devices — iTantra supports one
+/// direct connection at a time, so there's no fake multi-device reach data),
+/// and links to the device list ("Nearby devices") and the honest 2-node
+/// connection graph ("Your network"). Tapping a device opens Conversation.
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
@@ -16,224 +21,113 @@ class HomeScreen extends StatelessWidget {
     final app = context.watch<AppState>();
     final bt = context.watch<BluetoothManager>();
     final connected = bt.connectedDevice;
-    final playing = app.playingMessage;
 
     return Container(
       color: AppColors.surface,
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-            decoration: BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.border(0.08)))),
-            child: Row(
+      child: SafeArea(
+        bottom: false,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: InkWell(
-                    onTap: () => app.setTab(AppTab.devices),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 9,
-                          height: 9,
-                          decoration: BoxDecoration(shape: BoxShape.circle, color: connected != null ? AppColors.success : const Color(0xFFB9B9B4)),
-                        ),
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                connected?.displayName ?? 'No device paired',
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontFamily: appFont, fontWeight: FontWeight.w600, fontSize: 13.5, color: AppColors.textPrimary),
-                              ),
-                              Text(
-                                connected != null ? 'Connected' : 'Not connected',
-                                style: TextStyle(fontFamily: appFont, fontSize: 11, color: AppColors.textSecondary(0.5)),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Material(
-                  color: AppColors.accentSoft,
-                  borderRadius: BorderRadius.circular(100),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(100),
-                    onTap: app.openLangSheet,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                      decoration: BoxDecoration(borderRadius: BorderRadius.circular(100), border: Border.all(color: AppColors.accent.withValues(alpha: 0.3))),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(app.langMine.latinName, style: const TextStyle(fontFamily: appFont, fontWeight: FontWeight.w600, fontSize: 12.5, color: AppColors.accent)),
-                          const Padding(padding: EdgeInsets.symmetric(horizontal: 6), child: Icon(Icons.arrow_forward, size: 14, color: AppColors.accent)),
-                          Text(app.langTheirs.latinName, style: const TextStyle(fontFamily: appFont, fontWeight: FontWeight.w600, fontSize: 12.5, color: AppColors.accent)),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                _AlertsButton(app: app),
+                const Expanded(child: Text('Talk', style: TextStyle(fontFamily: appFont, fontWeight: FontWeight.w800, fontSize: 30, color: AppColors.textPrimary))),
+                _EmergencyPill(onTap: app.triggerEmergency),
               ],
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-            child: Material(
-              color: AppColors.danger,
-              borderRadius: BorderRadius.circular(14),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(14),
-                onTap: app.triggerEmergency,
-                child: Container(
-                  constraints: const BoxConstraints(minHeight: 56),
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: const [
-                      Icon(Icons.campaign_outlined, color: Colors.white, size: 18),
-                      SizedBox(width: 8),
-                      Text('Emergency Broadcast', style: TextStyle(fontFamily: appFont, fontWeight: FontWeight.w700, fontSize: 14, color: Colors.white, letterSpacing: 0.2)),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+            const SizedBox(height: 14),
+            _MeshStatusCard(connectedCount: connected != null ? 1 : 0),
+            if (app.emergencyMode) ...[
+              const SizedBox(height: 10),
+              _EmergencyModeBanner(),
+            ],
+            const SizedBox(height: 18),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
+                const Text('Nearby', style: TextStyle(fontFamily: appFont, fontWeight: FontWeight.w800, fontSize: 19, color: AppColors.textPrimary)),
                 InkWell(
-                  onTap: app.toggleScriptMode,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(borderRadius: BorderRadius.circular(100), border: Border.all(color: AppColors.border(0.12))),
-                    child: Text('Text: ${_scriptModeLabel(app.scriptMode)}', style: TextStyle(fontFamily: appFont, fontSize: 11, color: AppColors.textSecondary(0.45))),
-                  ),
+                  onTap: connected != null ? () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ConversationScreen())) : null,
+                  child: Text('Tap to talk', style: TextStyle(fontFamily: appFont, fontSize: 13, fontWeight: FontWeight.w600, color: connected != null ? AppColors.accent : AppColors.textSecondary(0.3))),
                 ),
               ],
             ),
-          ),
-          if (playing != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(color: AppColors.accentSoft, borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.accent.withValues(alpha: 0.25))),
-                child: Row(
-                  children: [
-                    const _PulsingIcon(),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Playing message from ${connected?.displayName ?? 'device'}',
-                        style: const TextStyle(fontFamily: appFont, fontSize: 12.5, fontWeight: FontWeight.w500, color: AppColors.textPrimary),
-                      ),
+            const SizedBox(height: 10),
+            if (connected != null)
+              _NearbyRow(
+                name: connected.displayName,
+                status: 'Connected',
+                statusColor: AppColors.success,
+                icon: Icons.phone_android,
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ConversationScreen())),
+              )
+            else
+              ...bt.history.take(3).map(
+                    (h) => _NearbyRow(
+                      name: h.name,
+                      status: 'Tap to connect',
+                      statusColor: AppColors.textSecondary(0.5),
+                      icon: Icons.history,
+                      onTap: () async {
+                        await bt.connectTo(h.address, knownName: h.name);
+                        if (context.mounted && bt.isConnected) {
+                          Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ConversationScreen()));
+                        }
+                      },
                     ),
-                    InkWell(
-                      customBorder: const CircleBorder(),
-                      onTap: () => app.replay(playing.id),
-                      child: Container(
-                        width: 28,
-                        height: 28,
-                        decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                        child: const Icon(Icons.refresh, size: 14, color: AppColors.accent),
-                      ),
-                    ),
-                  ],
+                  ),
+            if (connected == null && bt.history.isEmpty)
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.border(0.08))),
+                child: Text(
+                  'No devices yet — pair one to start talking.',
+                  style: TextStyle(fontFamily: appFont, fontSize: 13, color: AppColors.textSecondary(0.5)),
                 ),
               ),
+            const SizedBox(height: 4),
+            _LinkRow(
+              icon: Icons.phone_android,
+              title: 'Nearby devices',
+              subtitle: bt.history.isEmpty ? 'Find and pair a device' : '${bt.history.length} known device${bt.history.length == 1 ? '' : 's'}',
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const DevicesScreen())),
             ),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [for (final m in app.messages) _MessageBubble(m: m)],
+            const SizedBox(height: 10),
+            _LinkRow(
+              icon: Icons.hub_outlined,
+              title: 'Your network',
+              subtitle: 'See how messages travel',
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NetworkScreen())),
             ),
-          ),
-          const _TypedMessageBar(),
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 18, 16, 14),
-            decoration: BoxDecoration(border: Border(top: BorderSide(color: AppColors.border(0.06)))),
-            child: Column(
-              children: [
-                Text(
-                  app.recording ? 'Recording — release to send' : 'Hold to talk',
-                  style: TextStyle(fontFamily: appFont, fontSize: 12.5, fontWeight: FontWeight.w500, color: AppColors.textSecondary(0.5)),
-                ),
-                const SizedBox(height: 8),
-                _PttButton(app: app),
-                const SizedBox(height: 8),
-                SizedBox(
-                  height: 16,
-                  child: app.recording ? const WaveBars(color: AppColors.accent, barCount: 5, barWidth: 3, maxHeight: 16) : null,
-                ),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
-
-  String _scriptModeLabel(ScriptMode m) {
-    switch (m) {
-      case ScriptMode.both:
-        return 'Both';
-      case ScriptMode.native:
-        return 'Native script';
-      case ScriptMode.latin:
-        return 'Latin script';
-    }
-  }
 }
 
-class _AlertsButton extends StatelessWidget {
-  final AppState app;
-  const _AlertsButton({required this.app});
+class _EmergencyPill extends StatelessWidget {
+  final VoidCallback onTap;
+  const _EmergencyPill({required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final count = app.alertHistory.length;
     return Material(
-      color: AppColors.dangerSoft,
-      shape: const CircleBorder(),
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(100),
       child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AlertHistoryScreen())),
-        child: SizedBox(
-          width: 40,
-          height: 40,
-          child: Stack(
-            clipBehavior: Clip.none,
-            alignment: Alignment.center,
+        borderRadius: BorderRadius.circular(100),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(100), border: Border.all(color: AppColors.danger.withValues(alpha: 0.4))),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.account_balance, color: AppColors.danger, size: 18),
-              if (count > 0)
-                Positioned(
-                  top: 1,
-                  right: 3,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                    constraints: const BoxConstraints(minWidth: 14),
-                    decoration: const BoxDecoration(color: AppColors.danger, shape: BoxShape.circle),
-                    child: Text(
-                      count > 9 ? '9+' : '$count',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontFamily: appFont, fontSize: 9, fontWeight: FontWeight.w700, color: Colors.white),
-                    ),
-                  ),
-                ),
+              Icon(Icons.shield_outlined, size: 15, color: AppColors.danger),
+              SizedBox(width: 6),
+              Text('Emergency', style: TextStyle(fontFamily: appFont, fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.danger)),
             ],
           ),
         ),
@@ -242,290 +136,168 @@ class _AlertsButton extends StatelessWidget {
   }
 }
 
-class _PulsingIcon extends StatefulWidget {
-  const _PulsingIcon();
-  @override
-  State<_PulsingIcon> createState() => _PulsingIconState();
-}
-
-class _PulsingIconState extends State<_PulsingIcon> with SingleTickerProviderStateMixin {
-  late final AnimationController _c;
-  @override
-  void initState() {
-    super.initState();
-    _c = AnimationController(vsync: this, duration: const Duration(seconds: 1))..repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
+class _MeshStatusCard extends StatelessWidget {
+  final int connectedCount;
+  const _MeshStatusCard({required this.connectedCount});
 
   @override
   Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: Tween(begin: 1.0, end: 0.35).animate(_c),
-      child: const Icon(Icons.volume_up, size: 18, color: AppColors.accent),
-    );
-  }
-}
-
-class _MessageBubble extends StatelessWidget {
-  final Message m;
-  const _MessageBubble({required this.m});
-
-  @override
-  Widget build(BuildContext context) {
-    final app = context.read<AppState>();
-    final sent = m.dir == MsgDir.sent;
-
-    String primary;
-    String? secondary;
-    if (m.customText != null) {
-      primary = m.customText!;
-      secondary = null;
-    } else {
-      final phrase = app.phraseFor(m.phraseIdx, m.lang);
-      final showBoth = app.scriptMode == ScriptMode.both && m.lang != LangCode.en;
-      final showLatinOnly = app.scriptMode == ScriptMode.latin && m.lang != LangCode.en;
-      primary = showLatinOnly ? phrase.latin : phrase.native;
-      secondary = showBoth ? phrase.latin : null;
-    }
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Align(
-        alignment: sent ? Alignment.centerRight : Alignment.centerLeft,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
-            decoration: BoxDecoration(
-              color: sent ? AppColors.accent : AppColors.card,
-              borderRadius: BorderRadius.circular(16),
-              border: sent ? null : Border.all(color: AppColors.border(0.08)),
-            ),
+    final active = connectedCount > 0;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: active ? const Color(0x1A2F9E5C) : AppColors.card, borderRadius: BorderRadius.circular(16), border: active ? null : Border.all(color: AppColors.border(0.08))),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+            child: Icon(Icons.hub, size: 20, color: active ? AppColors.success : AppColors.textSecondary(0.4)),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
                 Row(
-                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      sent ? Icons.mic : Icons.volume_up,
-                      size: 12,
-                      color: sent ? Colors.white : AppColors.accent,
-                    ),
+                    Container(width: 7, height: 7, decoration: BoxDecoration(shape: BoxShape.circle, color: active ? AppColors.success : AppColors.textSecondary(0.35))),
                     const SizedBox(width: 6),
-                    Text(
-                      sent ? 'YOU' : 'THEM',
-                      style: TextStyle(
-                        fontFamily: appFont,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 10.5,
-                        letterSpacing: 0.4,
-                        color: sent ? Colors.white.withValues(alpha: 0.75) : AppColors.textSecondary(0.45),
-                      ),
-                    ),
-                    if (!sent) ...[
-                      const SizedBox(width: 10),
-                      InkWell(
-                        customBorder: const CircleBorder(),
-                        onTap: () => app.replay(m.id),
-                        child: Container(
-                          width: 20,
-                          height: 20,
-                          decoration: BoxDecoration(color: AppColors.accentSoft, shape: BoxShape.circle),
-                          child: Icon(m.playing ? Icons.volume_up : Icons.play_arrow, size: 12, color: AppColors.accent),
-                        ),
-                      ),
-                    ],
+                    Text(active ? 'Mesh connected' : 'Mesh idle', style: TextStyle(fontFamily: appFont, fontSize: 12, fontWeight: FontWeight.w600, color: active ? AppColors.success : AppColors.textSecondary(0.5))),
                   ],
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 2),
+                Text(active ? 'Offline mesh active' : 'No device connected', style: const TextStyle(fontFamily: appFont, fontWeight: FontWeight.w800, fontSize: 17, color: AppColors.textPrimary)),
                 Text(
-                  primary,
-                  style: TextStyle(
-                    fontFamily: m.lang.glyphFontFamily ?? appFont,
-                    fontSize: 14.5,
-                    height: 1.35,
-                    color: sent ? Colors.white : AppColors.textPrimary,
-                  ),
+                  active ? '$connectedCount device connected' : 'Connect a device to start talking',
+                  style: TextStyle(fontFamily: appFont, fontSize: 12.5, color: AppColors.textSecondary(0.55)),
                 ),
-                if (secondary != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Text(
-                      secondary,
-                      style: TextStyle(
-                        fontFamily: appFont,
-                        fontSize: 12,
-                        height: 1.3,
-                        fontStyle: FontStyle.italic,
-                        color: sent ? Colors.white.withValues(alpha: 0.7) : AppColors.textSecondary(0.5),
-                      ),
-                    ),
-                  ),
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmergencyModeBanner extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+      decoration: BoxDecoration(color: AppColors.dangerSoft, borderRadius: BorderRadius.circular(14)),
+      child: Row(
+        children: [
+          const Icon(Icons.shield, size: 16, color: AppColors.danger),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Emergency Mode active — communication prioritized',
+              style: TextStyle(fontFamily: appFont, fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.danger),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NearbyRow extends StatelessWidget {
+  final String name;
+  final String status;
+  final Color statusColor;
+  final IconData icon;
+  final VoidCallback onTap;
+  const _NearbyRow({required this.name, required this.status, required this.statusColor, required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.border(0.08))),
+        child: Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: const BoxDecoration(color: AppColors.accentSoft, shape: BoxShape.circle),
+              child: Center(child: Text(name.isNotEmpty ? name.substring(0, 1).toUpperCase() : '?', style: const TextStyle(fontFamily: appFont, fontWeight: FontWeight.w700, fontSize: 16, color: AppColors.accent))),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(name, overflow: TextOverflow.ellipsis, style: const TextStyle(fontFamily: appFont, fontWeight: FontWeight.w700, fontSize: 14.5, color: AppColors.textPrimary)),
+                  Row(
+                    children: [
+                      Container(width: 6, height: 6, decoration: BoxDecoration(shape: BoxShape.circle, color: statusColor)),
+                      const SizedBox(width: 5),
+                      Text(status, style: TextStyle(fontFamily: appFont, fontSize: 12, fontWeight: FontWeight.w600, color: statusColor)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Material(
+              color: AppColors.accent,
+              shape: const CircleBorder(),
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: onTap,
+                child: const Padding(padding: EdgeInsets.all(11), child: Icon(Icons.mic, size: 18, color: Colors.white)),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _TypedMessageBar extends StatefulWidget {
-  const _TypedMessageBar();
-
-  @override
-  State<_TypedMessageBar> createState() => _TypedMessageBarState();
-}
-
-class _TypedMessageBarState extends State<_TypedMessageBar> {
-  final _controller = TextEditingController();
-  final _focusNode = FocusNode();
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    _focusNode.dispose();
-    super.dispose();
-  }
-
-  void _send() {
-    final app = context.read<AppState>();
-    app.sendTypedMessage(_controller.text);
-    _controller.clear();
-  }
+class _LinkRow extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  const _LinkRow({required this.icon, required this.title, required this.subtitle, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-      child: Row(
-        children: [
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(color: AppColors.card, borderRadius: BorderRadius.circular(100), border: Border.all(color: AppColors.border(0.12))),
-              child: TextField(
-                controller: _controller,
-                focusNode: _focusNode,
-                textInputAction: TextInputAction.send,
-                onSubmitted: (_) => _send(),
-                style: const TextStyle(fontFamily: appFont, fontSize: 14, color: AppColors.textPrimary),
-                decoration: InputDecoration(
-                  hintText: 'Type a message…',
-                  hintStyle: TextStyle(fontFamily: appFont, fontSize: 14, color: AppColors.textSecondary(0.4)),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.border(0.08))),
+          child: Row(
+            children: [
+              Container(width: 36, height: 36, decoration: const BoxDecoration(color: AppColors.accentSoft, shape: BoxShape.circle), child: Icon(icon, size: 16, color: AppColors.accent)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(title, style: const TextStyle(fontFamily: appFont, fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.textPrimary)),
+                    Text(subtitle, style: TextStyle(fontFamily: appFont, fontSize: 12, color: AppColors.textSecondary(0.5))),
+                  ],
                 ),
               ),
-            ),
+              Icon(Icons.chevron_right, size: 18, color: AppColors.textSecondary(0.35)),
+            ],
           ),
-          const SizedBox(width: 8),
-          Material(
-            color: AppColors.accent,
-            shape: const CircleBorder(),
-            child: InkWell(
-              customBorder: const CircleBorder(),
-              onTap: _send,
-              child: const Padding(
-                padding: EdgeInsets.all(12),
-                child: Icon(Icons.arrow_upward, color: Colors.white, size: 18),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
-    );
-  }
-}
-
-class _PttButton extends StatefulWidget {
-  final AppState app;
-  const _PttButton({required this.app});
-
-  @override
-  State<_PttButton> createState() => _PttButtonState();
-}
-
-class _PttButtonState extends State<_PttButton> with SingleTickerProviderStateMixin {
-  late final AnimationController _pulse;
-
-  @override
-  void initState() {
-    super.initState();
-    _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400))..repeat();
-  }
-
-  @override
-  void dispose() {
-    _pulse.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final app = widget.app;
-    return SizedBox(
-      width: 104,
-      height: 104,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          if (app.recording) ...[
-            _PulseRing(controller: _pulse, delay: 0),
-            _PulseRing(controller: _pulse, delay: 0.36),
-          ],
-          GestureDetector(
-            onTapDown: (_) => app.startRecording(),
-            onTapUp: (_) => app.stopRecording(),
-            onTapCancel: () => app.stopRecording(),
-            child: AnimatedScale(
-              scale: app.recording ? 1.06 : 1.0,
-              duration: const Duration(milliseconds: 120),
-              child: Container(
-                width: 96,
-                height: 96,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: app.recording ? AppColors.accentDark : AppColors.accent,
-                  boxShadow: [BoxShadow(color: AppColors.accent.withValues(alpha: 0.35), blurRadius: 20, offset: const Offset(0, 8))],
-                ),
-                child: const Icon(Icons.mic, color: Colors.white, size: 34),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PulseRing extends StatelessWidget {
-  final AnimationController controller;
-  final double delay;
-  const _PulseRing({required this.controller, required this.delay});
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (context, _) {
-        final t = (controller.value + delay) % 1.0;
-        final scale = 1 + 0.9 * t;
-        final opacity = (0.45 * (1 - t)).clamp(0.0, 1.0);
-        return Opacity(
-          opacity: opacity,
-          child: Transform.scale(
-            scale: scale,
-            child: Container(width: 104, height: 104, decoration: const BoxDecoration(color: AppColors.accent, shape: BoxShape.circle)),
-          ),
-        );
-      },
     );
   }
 }

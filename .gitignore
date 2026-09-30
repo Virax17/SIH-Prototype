@@ -44,6 +44,10 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+# Gradle's own build output (some tooling, e.g. problems reports, writes here
+# even though android/build.gradle.kts redirects the main build dir to /build/)
+/android/build/
+
 # Widget Preview related
 .widget_preview/
 
@@ -56,4 +60,7 @@ app.*.map.json
 # Stray build output copies
 *.apk
 *.aab
-!itantra-release.apk
+
+# Offline STT/MT model assets (~300MB) — fetched by scripts/download_models.sh
+# (or .ps1), not committed. See README "Model assets" section.
+/assets/models/

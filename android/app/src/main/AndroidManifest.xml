@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Mic capture for on-device speech recognition (Vosk). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <application
         android:label="itantra"
         android:name="${applicationName}"

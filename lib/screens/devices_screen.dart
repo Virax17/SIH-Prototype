@@ -72,19 +72,21 @@ class _DevicesScreenState extends State<DevicesScreen> with TickerProviderStateM
       findNewList = findNewList.where((d) => !looksLikeAccessory(d.displayName)).toList();
     }
 
-    return Container(
-      color: AppColors.surface,
-      child: Column(
+    return Scaffold(
+      backgroundColor: AppColors.surface,
+      body: SafeArea(
+        child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
+            padding: const EdgeInsets.fromLTRB(4, 12, 16, 12),
             child: Row(
               children: [
+                IconButton(onPressed: () => Navigator.of(context).pop(), icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary)),
                 const Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Devices', style: TextStyle(fontFamily: appFont, fontWeight: FontWeight.w700, fontSize: 20, color: AppColors.textPrimary)),
+                      Text('Nearby devices', style: TextStyle(fontFamily: appFont, fontWeight: FontWeight.w700, fontSize: 20, color: AppColors.textPrimary)),
                       Text('Bluetooth · works with no internet', style: TextStyle(fontFamily: appFont, fontSize: 12, color: Color(0x8817181A))),
                     ],
                   ),
@@ -139,6 +141,7 @@ class _DevicesScreenState extends State<DevicesScreen> with TickerProviderStateM
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -280,7 +283,18 @@ class _HistoryCard extends StatelessWidget {
               ),
             ),
             if (connected)
-              const Icon(Icons.check, color: AppColors.success, size: 20)
+              Material(
+                color: AppColors.dangerSoft,
+                borderRadius: BorderRadius.circular(100),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(100),
+                  onTap: () => bt.disconnect(),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    child: Text('Disconnect', style: TextStyle(fontFamily: appFont, fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.danger)),
+                  ),
+                ),
+              )
             else if (connecting)
               SizedBox(
                 width: 16,
@@ -410,7 +424,18 @@ class _DeviceCard extends StatelessWidget {
               ),
             ),
             if (connected)
-              const Icon(Icons.check, color: AppColors.success, size: 20)
+              Material(
+                color: AppColors.dangerSoft,
+                borderRadius: BorderRadius.circular(100),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(100),
+                  onTap: () => bt.disconnect(),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    child: Text('Disconnect', style: TextStyle(fontFamily: appFont, fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.danger)),
+                  ),
+                ),
+              )
             else if (connecting)
               SizedBox(
                 width: 16,
