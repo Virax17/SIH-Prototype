@@ -112,6 +112,11 @@ class _LangPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Every language has a TTS voice (see tts_service.dart's locale map),
+    // but only English/Hindi have a bundled speech-recognition model —
+    // flagging that here so picking Tamil as "I speak" doesn't silently
+    // fail to transcribe (typing still works either way).
+    final voiceInputSupported = l == LangCode.en || l == LangCode.hi;
     return Material(
       color: active ? AppColors.accentSoft : Colors.white,
       borderRadius: BorderRadius.circular(14),
@@ -121,14 +126,31 @@ class _LangPill extends StatelessWidget {
         child: Container(
           constraints: const BoxConstraints(minHeight: 56),
           alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(horizontal: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: active ? AppColors.accent : AppColors.border(0.15), width: 2),
           ),
-          child: Text(
-            l.nativeName,
-            style: TextStyle(fontFamily: l.glyphFontFamily ?? appFont, fontSize: 13.5, fontWeight: active ? FontWeight.w700 : FontWeight.w500, color: AppColors.textPrimary),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                l.nativeName,
+                style: TextStyle(fontFamily: l.glyphFontFamily ?? appFont, fontSize: 13.5, fontWeight: active ? FontWeight.w700 : FontWeight.w500, color: AppColors.textPrimary),
+              ),
+              const SizedBox(height: 3),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.volume_up, size: 9, color: AppColors.textSecondary(0.4)),
+                  const SizedBox(width: 3),
+                  Text(
+                    voiceInputSupported ? 'Voice' : 'Text only',
+                    style: TextStyle(fontFamily: appFont, fontSize: 9, fontWeight: FontWeight.w600, color: AppColors.textSecondary(0.4)),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),

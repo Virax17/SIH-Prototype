@@ -20,7 +20,7 @@ Two phones communicate by voice over Bluetooth with no internet, no SIM, and no 
 
 ## Status
 
-Real Bluetooth Classic connectivity is wired in (pairing, connecting, a background server so either phone can initiate). Voice itself — on-device STT and TTS — is still simulated: speaking or typing a message plays out a canned reply after a short delay, standing in for the real recognition/synthesis pipeline that hasn't been integrated yet.
+The full offline voice pipeline is wired end to end: push-to-talk captures real speech, transcribes it on-device (Vosk), translates it (a quantized OPUS-MT/Marian ONNX model, English↔Hindi), sends the translated text to the paired phone over the existing Bluetooth Classic connection, and the receiving phone speaks it (on-device TTS). English and Hindi are supported for the real pipeline; Tamil still falls back to text-only (no bundled STT/MT model for it yet — see "Model assets").
 
 ## Features
 
@@ -44,15 +44,28 @@ Real Bluetooth Classic connectivity is wired in (pairing, connecting, a backgrou
 ## Tech stack
 
 - **Flutter** (Dart), **provider** for state management
-- **flutter_classic_bluetooth** — permissions, adapter state, discovery, pairing, RFCOMM connect/server
+- **flutter_classic_bluetooth** — permissions, adapter state, discovery, pairing, RFCOMM connect/server; `BluetoothManager.sendText`/`incomingText` carry the translated text of each message over the connection
+- **vosk_flutter** — offline speech-to-text (English/Hindi small models), including its own on-Android microphone capture
+- **onnxruntime** + **dart_sentencepiece_tokenizer** — offline English↔Hindi translation: quantized ONNX exports of Helsinki-NLP's OPUS-MT (Marian) models, tokenized with the models' own `.spm`/`vocab.json` files, greedy-decoded on-device
+- **flutter_tts** — offline text-to-speech via the OS's own TTS engine
 - **shared_preferences** — persisted connection history and alert log
 - Native Android (`MainActivity.kt`) — volume-key combo interception via `dispatchKeyEvent`, forwarded to Flutter over a `MethodChannel`
 - Bundled **Barlow**, **Noto Sans Devanagari**, **Noto Sans Tamil** fonts (no runtime font fetching, consistent with the fully-offline goal)
 
-Not yet integrated:
-- An offline STT engine (e.g. Vosk, or a quantized ONNX Conformer/Whisper model)
-- An offline TTS engine (e.g. a quantized on-device neural voice, or `flutter_tts`)
-- Sending recognized text and playing received text over the actual Bluetooth connection (the message pipeline is fully built — only the audio in/out ends are still simulated)
+## Model assets
+
+The STT and translation models (~300MB total) aren't committed to git — fetch them once with:
+
+```bash
+scripts/download_models.sh     # macOS/Linux/Git Bash
+scripts/download_models.ps1    # Windows PowerShell
+```
+
+This downloads, into `assets/models/` (gitignored):
+- `vosk-model-en-us-0.22-lgraph.zip` (~125MB, mid-tier — noticeably more accurate than Vosk's small tier) / `vosk-model-small-hi-0.22.zip` (~40MB — Hindi has no mid-tier option, only small-42MB or full-1.5GB) — Vosk STT models
+- `mt-en-hi/` / `mt-hi-en/` — quantized ONNX OPUS-MT translation models plus their tokenizer files (~110MB each direction)
+
+`flutter run`/`flutter build` will fail on missing assets until this has been run once. Tamil has no bundled STT/MT model, so typed text is the only input for that language pair for now.
 
 ## Project structure
 

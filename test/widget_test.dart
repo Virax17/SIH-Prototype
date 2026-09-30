@@ -4,7 +4,7 @@ import 'package:itantra/main.dart';
 
 void main() {
   testWidgets('iTantra home screen renders', (WidgetTester tester) async {
-    await tester.pumpWidget(const ITantraApp());
+    await tester.pumpWidget(const ITantraApp(onboardingDone: true));
     await tester.pump();
 
     expect(find.text('Hold to talk'), findsOneWidget);

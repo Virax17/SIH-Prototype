@@ -14,17 +14,34 @@ dependencies:
   provider: ^6.1.2
   flutter_classic_bluetooth: ^1.1.0
   shared_preferences: ^2.3.2
+  vosk_flutter: ^0.3.48
+  onnxruntime: ^1.4.1
+  dart_sentencepiece_tokenizer: ^1.4.1
+  flutter_tts: ^4.2.0
+  permission_handler: ^11.3.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
 
+# vosk_flutter 0.3.48 pins permission_handler to ^10.2.0, whose Android
+# plugin still references the v1 embedding (PluginRegistry.Registrar),
+# removed from current Flutter — doesn't build. Override to a version that
+# builds; permission_handler's Dart API this app uses (Permission.microphone
+# .request()) is unchanged across this bump.
+dependency_overrides:
+  permission_handler: ^11.3.1
+  permission_handler_android: ^12.0.13
+
 flutter:
   uses-material-design: true
 
   assets:
     - assets/fonts/
+    - assets/models/
+    - assets/models/mt-en-hi/
+    - assets/models/mt-hi-en/
 
   fonts:
     - family: Barlow

@@ -5,6 +5,18 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_classic_bluetooth/flutter_classic_bluetooth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models.dart';
+
+/// A message received over the connection: the text and the language it's
+/// actually written in — sent by the peer, not assumed from our own
+/// language setting, so playback uses the right TTS voice even if the two
+/// phones' language pairs aren't perfectly mirrored.
+class IncomingMessage {
+  final String text;
+  final LangCode lang;
+  const IncomingMessage({required this.text, required this.lang});
+}
+
 /// A device this app has successfully connected to before, remembered
 /// locally so the user can reconnect without rescanning/re-pairing.
 class KnownDevice {
@@ -52,6 +64,79 @@ class BluetoothManager extends ChangeNotifier {
   StreamSubscription<BtcAdapterState>? _adapterSub;
   StreamSubscription<BtcConnection>? _serverSub;
   StreamSubscription<BtcConnectionState>? _connStateSub;
+  StreamSubscription<String>? _incomingLinesSub;
+
+  /// Messages received over the active connection — one recognized/
+  /// translated utterance per event, tagged with the language it's actually
+  /// written in (see [sendText]).
+  final _incomingTextController = StreamController<IncomingMessage>.broadcast();
+  Stream<IncomingMessage> get incomingText => _incomingTextController.stream;
+
+  /// Fires the id of a message once the peer's [_incomingAcksController]
+  /// echo confirms it was actually received (not just written to the radio).
+  final _incomingAcksController = StreamController<int>.broadcast();
+  Stream<int> get messageAcked => _incomingAcksController.stream;
+
+  int _nextMessageId = 1;
+
+  /// Sends [text] (already translated into [lang]) as a message to the
+  /// connected device and returns an id that later appears on
+  /// [messageAcked] once the peer confirms receipt. Returns null (silently)
+  /// if nothing is connected, mirroring how a dropped voice packet would
+  /// just not arrive rather than crashing the sender.
+  Future<int?> sendText(String text, LangCode lang) async {
+    // Collapse embedded newlines — the wire protocol is one message per
+    // line, and multi-line input (e.g. the Broadcast compose box) would
+    // otherwise split into unparseable fragments on the receiving end.
+    final trimmed = text.trim().replaceAll(RegExp(r'\s*[\r\n]+\s*'), ' ');
+    if (trimmed.isEmpty) return null;
+    final conn = _connection;
+    if (conn == null || !conn.isConnected) return null;
+    final id = _nextMessageId++;
+    try {
+      await conn.output.writeLine('MSG $id ${lang.name} $trimmed', newline: '\n');
+      return id;
+    } catch (e) {
+      lastError = '$e';
+      notifyListeners();
+      return null;
+    }
+  }
+
+  Future<void> _handleIncomingLine(String line) async {
+    if (line.startsWith('MSG ')) {
+      final rest = line.substring(4);
+      final sep1 = rest.indexOf(' ');
+      if (sep1 < 0) return;
+      final id = int.tryParse(rest.substring(0, sep1));
+      if (id == null) return;
+      final afterId = rest.substring(sep1 + 1);
+      final sep2 = afterId.indexOf(' ');
+      if (sep2 < 0) return;
+      final langToken = afterId.substring(0, sep2);
+      LangCode? lang;
+      for (final l in LangCode.values) {
+        if (l.name == langToken) {
+          lang = l;
+          break;
+        }
+      }
+      if (lang == null) return;
+      final text = afterId.substring(sep2 + 1);
+      if (text.isNotEmpty) _incomingTextController.add(IncomingMessage(text: text, lang: lang));
+      final conn = _connection;
+      if (conn != null && conn.isConnected) {
+        try {
+          await conn.output.writeLine('ACK $id', newline: '\n');
+        } catch (_) {
+          // Non-fatal: the sender just won't see a "Delivered" tick.
+        }
+      }
+    } else if (line.startsWith('ACK ')) {
+      final id = int.tryParse(line.substring(4));
+      if (id != null) _incomingAcksController.add(id);
+    }
+  }
 
   bool get isConnected => _connection?.isConnected ?? false;
   String? get connectedAddress => isConnected ? _connection!.address : null;
@@ -214,6 +299,7 @@ class BluetoothManager extends ChangeNotifier {
 
   void _adoptConnection(BtcConnection conn, {String? fallbackName}) {
     _connStateSub?.cancel();
+    _incomingLinesSub?.cancel();
     _connection?.dispose();
     _connection = conn;
     _connStateSub = conn.stateStream.listen((s) {
@@ -222,6 +308,16 @@ class BluetoothManager extends ChangeNotifier {
       }
       notifyListeners();
     });
+    _incomingLinesSub = conn.input.lines().listen(
+      (line) {
+        final trimmed = line.trim();
+        if (trimmed.isNotEmpty) unawaited(_handleIncomingLine(trimmed));
+      },
+      onError: (Object e) {
+        lastError = '$e';
+        notifyListeners();
+      },
+    );
     notifyListeners();
 
     final name = connectedDevice?.displayName ?? fallbackName ?? conn.address;
@@ -239,6 +335,9 @@ class BluetoothManager extends ChangeNotifier {
     _adapterSub?.cancel();
     _serverSub?.cancel();
     _connStateSub?.cancel();
+    _incomingLinesSub?.cancel();
+    _incomingTextController.close();
+    _incomingAcksController.close();
     _server?.close();
     _connection?.dispose();
     super.dispose();

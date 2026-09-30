@@ -5,33 +5,21 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'models.dart';
+import 'services/bluetooth_manager.dart';
+import 'services/speech_recognition_service.dart';
+import 'services/translation_service.dart';
+import 'services/tts_service.dart';
 
 const _alertHistoryKey = 'itantra.alerts.history';
+const _emergencyModeKey = 'itantra.emergencyMode';
+const _onboardingDoneKey = 'itantra.onboarding.done';
+const _volumeKey = 'itantra.volume';
 
-enum AppTab { home, devices, settings }
+enum AppTab { home, broadcast, settings }
 
-final List<Map<LangCode, Phrase>> kPhrases = [
-  {
-    LangCode.en: const Phrase(native: 'Send medical supplies now', latin: 'Send medical supplies now'),
-    LangCode.hi: const Phrase(native: 'अभी चिकित्सा सामग्री भेजें', latin: 'Abhi chikitsa samagri bhejein'),
-    LangCode.ta: const Phrase(native: 'இப்போது மருத்துவ பொருட்களை அனுப்பவும்', latin: 'Ippodhu maruthuva porutkalai anuppavum'),
-  },
-  {
-    LangCode.en: const Phrase(native: 'All clear, proceed to the shelter', latin: 'All clear, proceed to the shelter'),
-    LangCode.hi: const Phrase(native: 'सब ठीक है, आश्रय की ओर बढ़ें', latin: 'Sab theek hai, aashray ki or badhein'),
-    LangCode.ta: const Phrase(native: 'எல்லாம் சரி, தங்குமிடத்திற்கு செல்லுங்கள்', latin: 'Ellaam sari, thangumidathirku sellungal'),
-  },
-  {
-    LangCode.en: const Phrase(native: 'Water levels rising, move to higher ground', latin: 'Water levels rising, move to higher ground'),
-    LangCode.hi: const Phrase(native: 'पानी का स्तर बढ़ रहा है, ऊँची जगह जाएँ', latin: 'Paani ka star badh raha hai, oonchi jagah jaayein'),
-    LangCode.ta: const Phrase(native: 'நீர் மட்டம் உயருகிறது, உயரமான இடத்திற்கு செல்லுங்கள்', latin: 'Neer mattam uyarugirathu, uyaramana idathirku sellungal'),
-  },
-  {
-    LangCode.en: const Phrase(native: 'Team is on the way, hold position', latin: 'Team is on the way, hold position'),
-    LangCode.hi: const Phrase(native: 'टीम रास्ते में है, स्थिति बनाए रखें', latin: 'Team raaste mein hai, sthiti banaaye rakhein'),
-    LangCode.ta: const Phrase(native: 'குழு வழியில் உள்ளது, இடத்தில் இருங்கள்', latin: 'Kuzhu vazhiyil ullathu, idathil irungal'),
-  },
-];
+/// Live stage of the real STT → MT → Bluetooth-send pipeline for the
+/// in-flight recording, shown as a stepper (see `home_screen.dart`).
+enum PipelineStage { idle, listening, understanding, sending }
 
 final Map<LangCode, Phrase> kEmergencyMessage = {
   LangCode.en: const Phrase(native: 'Flash flood warning — evacuate to high ground immediately', latin: 'Flash flood warning — evacuate to high ground immediately'),
@@ -39,21 +27,28 @@ final Map<LangCode, Phrase> kEmergencyMessage = {
   LangCode.ta: const Phrase(native: 'திடீர் வெள்ள எச்சரிக்கை — உடனடியாக உயரமான இடத்திற்கு செல்லவும்', latin: 'Thidir vella echcharikkai — udanadiyaaga uyaramaana idathirku sellavum'),
 };
 
-/// Mirrors the state machine from the new Claude Design prototype
-/// (light theme, tab navigation), with the same simulated behavior.
-/// Real STT/TTS/Bluetooth wiring replaces the simulation methods later.
+/// Mirrors the state machine from the new Claude Design prototype (light
+/// theme, tab navigation). Speech recognition, translation, TTS playback and
+/// Bluetooth text transport are real (see services/), driven from here.
 class AppState extends ChangeNotifier {
   AppTab tab = AppTab.home;
   bool recording = false;
+  PipelineStage pipelineStage = PipelineStage.idle;
 
-  List<Message> messages = [
-    const Message(id: 1, dir: MsgDir.received, phraseIdx: 0, lang: LangCode.en, playing: false),
-  ];
-  int nextPhrase = 1;
+  /// Live partial transcript from Vosk while [recording] is true — updates
+  /// continuously as the user speaks, before the utterance is finalized.
+  /// See `speech_recognition_service.dart`'s `onPartial`.
+  String partialTranscript = '';
+
+  List<Message> messages = [];
+
+  /// Maps a `BluetoothManager.sendText` protocol id to the [Message.id] it
+  /// belongs to, so an ack on `messageAcked` can flip that message's
+  /// [DeliveryStatus] to delivered.
+  final Map<int, int> _pendingDeliveries = {};
 
   LangCode langMine = LangCode.en;
   LangCode langTheirs = LangCode.hi;
-  ScriptMode scriptMode = ScriptMode.both;
   bool showLangSheet = false;
 
   double volume = 80;
@@ -64,10 +59,102 @@ class AppState extends ChangeNotifier {
 
   List<EmergencyAlertRecord> alertHistory = [];
 
+  /// When on: a persistent status banner shows on Home, and the decorative
+  /// PTT pulse-ring animation is skipped (small real battery saving, not
+  /// just a label) — see `home_screen.dart`/`conversation_screen.dart`.
+  bool emergencyMode = false;
+
+  bool onboardingDone;
+
   final List<Timer> _timers = [];
 
-  AppState() {
+  final SpeechRecognitionService _stt = SpeechRecognitionService();
+  final TranslationService _mt = TranslationService();
+  final TtsService _tts = TtsService();
+  BluetoothManager? _bt;
+  StreamSubscription<IncomingMessage>? _incomingSub;
+  StreamSubscription<int>? _acksSub;
+  StreamSubscription<String>? _partialSub;
+
+  AppState({this.onboardingDone = true}) {
     _loadAlertHistory();
+    _loadEmergencyMode();
+    _loadVolume();
+    unawaited(_stt.preload(langMine));
+    unawaited(_mt.preload(langMine, langTheirs));
+    _partialSub = _stt.onPartial.listen((partial) {
+      partialTranscript = partial;
+      notifyListeners();
+    });
+  }
+
+  Future<void> _loadVolume() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getDouble(_volumeKey);
+      if (saved != null) {
+        volume = saved;
+        notifyListeners();
+      }
+    } catch (_) {
+      // Non-fatal: defaults to 80.
+    }
+    unawaited(_tts.setVolume(volume / 100));
+  }
+
+  Future<void> _loadEmergencyMode() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      emergencyMode = prefs.getBool(_emergencyModeKey) ?? false;
+      notifyListeners();
+    } catch (_) {
+      // Non-fatal: defaults to off.
+    }
+  }
+
+  void toggleEmergencyMode() {
+    emergencyMode = !emergencyMode;
+    notifyListeners();
+    unawaited(() async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool(_emergencyModeKey, emergencyMode);
+      } catch (_) {
+        // Non-fatal: the toggle just won't persist across restarts this time.
+      }
+    }());
+  }
+
+  void completeOnboarding() {
+    onboardingDone = true;
+    notifyListeners();
+    unawaited(() async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool(_onboardingDoneKey, true);
+      } catch (_) {
+        // Non-fatal: onboarding just replays once more next launch.
+      }
+    }());
+  }
+
+  /// Links this state to the app's [BluetoothManager] so recognized/typed
+  /// text gets sent, and incoming text drives TTS playback. Idempotent —
+  /// safe to call on every rebuild of the widget that wires them together.
+  void attachBluetooth(BluetoothManager bt) {
+    if (identical(_bt, bt)) return;
+    _bt = bt;
+    unawaited(_incomingSub?.cancel());
+    unawaited(_acksSub?.cancel());
+    _incomingSub = bt.incomingText.listen(_onIncomingText);
+    _acksSub = bt.messageAcked.listen(_onMessageAcked);
+  }
+
+  void _onMessageAcked(int btId) {
+    final msgId = _pendingDeliveries.remove(btId);
+    if (msgId == null) return;
+    messages = [for (final m in messages) m.id == msgId ? m.copyWith(delivery: DeliveryStatus.delivered) : m];
+    notifyListeners();
   }
 
   Future<void> _loadAlertHistory() async {
@@ -91,12 +178,6 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  Timer _addTimer(Duration d, void Function() fn) {
-    final t = Timer(d, fn);
-    _timers.add(t);
-    return t;
-  }
-
   Message? get playingMessage {
     for (final m in messages) {
       if (m.playing) return m;
@@ -111,39 +192,80 @@ class AppState extends ChangeNotifier {
   }
 
   void startRecording() {
-    if (showEmergency) return;
+    if (showEmergency || recording || pipelineStage != PipelineStage.idle) return;
     recording = true;
+    pipelineStage = PipelineStage.listening;
+    partialTranscript = '';
     notifyListeners();
+    unawaited(_stt.startListening(langMine));
   }
 
   void stopRecording() {
     if (!recording) return;
     recording = false;
-    final idx = nextPhrase;
-    final msg = Message(id: DateTime.now().millisecondsSinceEpoch, dir: MsgDir.sent, phraseIdx: idx, lang: langMine);
-    messages = [...messages, msg];
-    nextPhrase = idx + 1;
+    pipelineStage = PipelineStage.understanding;
     notifyListeners();
-    _addTimer(const Duration(milliseconds: 1100), receiveReply);
+    unawaited(_finishRecording());
+  }
+
+  Future<void> _finishRecording() async {
+    final recognized = await _stt.stopListening();
+    partialTranscript = '';
+    if (recognized.isEmpty) {
+      pipelineStage = PipelineStage.idle;
+      notifyListeners();
+      return;
+    }
+
+    final msgId = DateTime.now().millisecondsSinceEpoch;
+    final msg = Message(id: msgId, dir: MsgDir.sent, lang: langMine, text: recognized, delivery: DeliveryStatus.sending);
+    messages = [...messages, msg];
+    notifyListeners();
+
+    final translated = await _mt.translate(recognized, from: langMine, to: langTheirs);
+    pipelineStage = PipelineStage.sending;
+    notifyListeners();
+
+    final btId = await _bt?.sendText(translated, langTheirs);
+    if (btId != null) _pendingDeliveries[btId] = msgId;
+
+    pipelineStage = PipelineStage.idle;
+    notifyListeners();
   }
 
   void sendTypedMessage(String text) {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return;
-    final msg = Message(id: DateTime.now().millisecondsSinceEpoch, dir: MsgDir.sent, phraseIdx: 0, lang: langMine, customText: trimmed);
+    final msgId = DateTime.now().millisecondsSinceEpoch;
+    final msg = Message(id: msgId, dir: MsgDir.sent, lang: langMine, text: trimmed, delivery: DeliveryStatus.sending);
     messages = [...messages, msg];
     notifyListeners();
-    _addTimer(const Duration(milliseconds: 1100), receiveReply);
+    unawaited(_translateAndSend(msgId, trimmed));
   }
 
-  void receiveReply() {
-    final idx = nextPhrase;
+  Future<void> _translateAndSend(int msgId, String text) async {
+    final translated = await _mt.translate(text, from: langMine, to: langTheirs);
+    final btId = await _bt?.sendText(translated, langTheirs);
+    if (btId != null) _pendingDeliveries[btId] = msgId;
+  }
+
+  /// Translates [text] from [langMine] to [langTheirs] without sending
+  /// anything — lets the user (or a connectionless device) see what a
+  /// message would say on the other end before a peer is even connected.
+  Future<String> previewTranslation(String text) => _mt.translate(text, from: langMine, to: langTheirs);
+
+  /// Called when a message arrives over Bluetooth — already translated by
+  /// the sender, tagged with the language it's actually written in (not
+  /// assumed from our own [langMine], so playback is correct even if the
+  /// two phones' language pairs aren't perfectly mirrored).
+  void _onIncomingText(IncomingMessage incoming) {
+    final text = incoming.text;
+    final lang = incoming.lang;
     final id = DateTime.now().millisecondsSinceEpoch + 1;
-    final msg = Message(id: id, dir: MsgDir.received, phraseIdx: idx, lang: langMine, playing: true);
+    final msg = Message(id: id, dir: MsgDir.received, lang: lang, text: text, playing: true);
     messages = [...messages, msg];
-    nextPhrase = idx + 1;
     notifyListeners();
-    _addTimer(const Duration(milliseconds: 2400), () => finishPlayback(id));
+    unawaited(_tts.speak(text, lang, onDone: () => finishPlayback(id)));
   }
 
   void finishPlayback(int id) {
@@ -152,18 +274,19 @@ class AppState extends ChangeNotifier {
   }
 
   void replay(int id) {
+    final matches = messages.where((m) => m.id == id);
+    if (matches.isEmpty) return;
+    final msg = matches.first;
     messages = [for (final m in messages) m.id == id ? m.copyWith(playing: true) : m];
     notifyListeners();
-    _addTimer(const Duration(milliseconds: 2000), () => finishPlayback(id));
+    unawaited(_tts.speak(msg.text, msg.lang, onDone: () => finishPlayback(id)));
   }
 
-  void forceIncoming() => receiveReply();
-
-  void toggleScriptMode() {
-    const order = [ScriptMode.both, ScriptMode.native, ScriptMode.latin];
-    final i = order.indexOf(scriptMode);
-    scriptMode = order[(i + 1) % order.length];
-    notifyListeners();
+  /// Speaks [text] live in [langMine] — used by the typed-message bar's
+  /// preview button to hear a draft read back before sending, and by the
+  /// Broadcast screen's "Speak instead" affordance.
+  void speakPreview(String text) {
+    unawaited(_tts.speak(text, langMine));
   }
 
   void openLangSheet() {
@@ -179,11 +302,14 @@ class AppState extends ChangeNotifier {
   void selectMine(LangCode l) {
     langMine = l;
     notifyListeners();
+    unawaited(_stt.preload(langMine));
+    unawaited(_mt.preload(langMine, langTheirs));
   }
 
   void selectTheirs(LangCode l) {
     langTheirs = l;
     notifyListeners();
+    unawaited(_mt.preload(langMine, langTheirs));
   }
 
   void swapLangs() {
@@ -191,11 +317,22 @@ class AppState extends ChangeNotifier {
     langMine = langTheirs;
     langTheirs = tmp;
     notifyListeners();
+    unawaited(_stt.preload(langMine));
+    unawaited(_mt.preload(langMine, langTheirs));
   }
 
   void setVolume(double v) {
     volume = v;
     notifyListeners();
+    unawaited(_tts.setVolume(v / 100));
+    unawaited(() async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setDouble(_volumeKey, v);
+      } catch (_) {
+        // Non-fatal: the slider just won't remember its position.
+      }
+    }());
   }
 
   void toggleEmergencyEnabled() {
@@ -240,13 +377,15 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Phrase phraseFor(int phraseIdx, LangCode lang) => kPhrases[phraseIdx % kPhrases.length][lang]!;
-
   @override
   void dispose() {
     for (final t in _timers) {
       t.cancel();
     }
+    _incomingSub?.cancel();
+    _acksSub?.cancel();
+    _partialSub?.cancel();
+    _mt.dispose();
     super.dispose();
   }
 }
