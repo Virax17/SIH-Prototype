@@ -60,6 +60,7 @@ app.*.map.json
 # Stray build output copies
 *.apk
 *.aab
+!itantra-release.apk
 
 # Offline STT/MT model assets (~300MB) — fetched by scripts/download_models.sh
 # (or .ps1), not committed. See README "Model assets" section.
