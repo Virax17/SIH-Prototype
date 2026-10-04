@@ -27,20 +27,34 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-
-        // Vosk and ONNX Runtime ship native .so libraries per ABI; restrict to
-        // the two ABIs that cover virtually all real Android phones so the
-        // ~300MB of bundled model assets isn't multiplied across unused ABIs.
-        ndk {
-            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
-        }
     }
+
+    // Vosk and ONNX Runtime ship native .so libraries per ABI; a universal
+    // APK would bundle both architectures' copies even though a given phone
+    // only uses one. Split into one APK per ABI by building with
+    // `flutter build apk --release --split-per-abi` instead of configuring
+    // `splits {}` directly here — the Flutter Gradle plugin injects its own
+    // ndk.abiFilters default that conflicts with a hand-written splits
+    // block. That produces armeabi-v7a/arm64-v8a/x86_64 APKs; only the
+    // first two matter for real phones, x86_64 (emulators) is ignorable.
+    // The bundled model assets aren't ABI-specific and stay the same size
+    // in every split; this only trims the native-library portion.
 
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+
+            // Shrink/obfuscate Dart-adjacent Java/Kotlin code and drop unused
+            // resources — real size reduction on top of the release build's
+            // AOT-compiled (smaller than debug JIT) Dart code. The bundled
+            // ONNX/Vosk model assets dominate total size and are already
+            // near-incompressible binary weights, so this mainly trims the
+            // app/plugin code and resources, not the models themselves.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 }
